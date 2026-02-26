@@ -2,6 +2,8 @@
 
 let currentCategoryId = null;
 let eventsData = [];
+let allCities = [];
+let allCountries = [];
 
 // ============ API Functions ============
 
@@ -34,6 +36,9 @@ async function loadEvents(filters = {}) {
     if (filters.date_to) params.append('date_to', filters.date_to);
     if (filters.chat_id) params.append('chat_id', filters.chat_id);
     if (filters.price_type) params.append('price_type', filters.price_type);
+    if (filters.city) params.append('city', filters.city);
+    if (filters.country) params.append('country', filters.country);
+    if (filters.max_price) params.append('max_price', filters.max_price);
 
     const events = await fetchAPI(`/api/events?${params.toString()}`);
     loading.style.display = 'none';
@@ -75,6 +80,18 @@ function createEventCard(event) {
 
     const priceText = event.ticket_price || 'Free';
 
+    // Build location string with city/country
+    let locationStr = '';
+    if (event.city && event.country) {
+        locationStr = `${event.city}, ${event.country}`;
+    } else if (event.city) {
+        locationStr = event.city;
+    } else if (event.country) {
+        locationStr = event.country;
+    } else if (event.event_location) {
+        locationStr = truncate(event.event_location, 40);
+    }
+
     card.innerHTML = `
         ${imageHtml}
         <div class="event-card-content">
@@ -91,10 +108,10 @@ function createEventCard(event) {
                     <span>${timeStr}</span>
                 </div>
                 ` : ''}
-                ${event.event_location ? `
+                ${locationStr ? `
                 <div class="event-card-meta-item">
                     <span class="event-card-meta-icon">📍</span>
-                    <span>${escapeHtml(truncate(event.event_location, 40))}</span>
+                    <span>${escapeHtml(locationStr)}</span>
                 </div>
                 ` : ''}
             </div>
@@ -113,69 +130,107 @@ function showEventModal(event) {
     const body = document.getElementById('modal-body');
 
     if (!modal || !body) {
-        // Fallback to event page
         window.location.href = `/event/${event.id}`;
         return;
     }
 
+    // Build location string
+    let locationStr = '';
+    if (event.city && event.country) {
+        locationStr = `${event.city}, ${event.country}`;
+    } else if (event.city) {
+        locationStr = event.city;
+    } else if (event.country) {
+        locationStr = event.country;
+    }
+    if (event.event_location) {
+        locationStr = locationStr ? `${event.event_location} (${locationStr})` : event.event_location;
+    }
+
     const imageHtml = event.image_path
-        ? `<img src="${event.image_path}" alt="${escapeHtml(event.event_title)}" style="width:100%;border-radius:8px;margin-bottom:1rem;">`
+        ? `<img src="${event.image_path}" alt="${escapeHtml(event.event_title)}" class="modal-image">`
         : '';
 
     body.innerHTML = `
         ${imageHtml}
-        ${event.category_name ? `<span class="category-badge">${escapeHtml(event.category_name)}</span>` : ''}
-        <h2 style="margin:0.5rem 0 1rem;font-size:1.5rem;">${escapeHtml(event.event_title)}</h2>
+        <div class="modal-header">
+            ${event.category_name ? `<span class="category-badge">${escapeHtml(event.category_name)}</span>` : ''}
+            <h2 style="margin:0.5rem 0 0;font-size:1.5rem;font-weight:700;">${escapeHtml(event.event_title)}</h2>
+        </div>
 
-        <div style="margin-bottom:1.5rem;">
+        <div class="modal-meta">
             ${event.event_start ? `
-            <div style="display:flex;align-items:center;gap:0.5rem;margin-bottom:0.5rem;">
-                <span>📅</span>
-                <span>${formatDate(event.event_start)} ${formatTime(event.event_start)}</span>
+            <div class="modal-meta-item">
+                <span class="modal-meta-icon">📅</span>
+                <span><strong>${formatDate(event.event_start)}</strong> at ${formatTime(event.event_start)}</span>
             </div>
             ` : ''}
-            ${event.event_location ? `
-            <div style="display:flex;align-items:center;gap:0.5rem;margin-bottom:0.5rem;">
-                <span>📍</span>
-                <span>${escapeHtml(event.event_location)}</span>
+            ${locationStr ? `
+            <div class="modal-meta-item">
+                <span class="modal-meta-icon">📍</span>
+                <span>${escapeHtml(locationStr)}</span>
             </div>
             ` : ''}
             ${event.ticket_price ? `
-            <div style="display:flex;align-items:center;gap:0.5rem;margin-bottom:0.5rem;">
-                <span>🎟️</span>
+            <div class="modal-meta-item">
+                <span class="modal-meta-icon">🎟️</span>
                 <span>${escapeHtml(event.ticket_price)}</span>
             </div>
             ` : ''}
             ${event.organizer ? `
-            <div style="display:flex;align-items:center;gap:0.5rem;margin-bottom:0.5rem;">
-                <span>👤</span>
+            <div class="modal-meta-item">
+                <span class="modal-meta-icon">👤</span>
                 <span>${escapeHtml(event.organizer)}</span>
             </div>
             ` : ''}
+            <div class="modal-meta-item">
+                <span class="modal-meta-icon">💬</span>
+                <span>From: ${escapeHtml(event.chat_name || 'Unknown Group')}</span>
+            </div>
         </div>
 
         ${event.event_description ? `
-        <p style="color:var(--text-secondary);margin-bottom:1rem;">${escapeHtml(event.event_description)}</p>
+        <div style="padding:0 1.5rem;">
+            <p style="color:var(--text-secondary);line-height:1.6;">${escapeHtml(event.event_description)}</p>
+        </div>
         ` : ''}
 
         ${event.event_link ? `
-        <a href="${escapeHtml(event.event_link)}" target="_blank" rel="noopener" class="btn btn-primary" style="margin-bottom:1rem;">
-            Register / More Info →
-        </a>
+        <div class="modal-iframe-container">
+            <div style="padding:0.75rem 1rem;background:var(--surface);border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;">
+                <span style="font-size:0.875rem;color:var(--text-muted);">Event Page Preview</span>
+                <a href="${escapeHtml(event.event_link)}" target="_blank" rel="noopener" style="font-size:0.75rem;color:var(--primary);">
+                    Open in new tab ↗
+                </a>
+            </div>
+            <iframe src="${escapeHtml(event.event_link)}" class="modal-iframe" sandbox="allow-scripts allow-same-origin"></iframe>
+        </div>
         ` : ''}
 
-        <div style="margin-top:1.5rem;padding-top:1rem;border-top:1px solid var(--border);">
+        <div class="modal-actions">
+            ${event.event_link ? `
+            <a href="${escapeHtml(event.event_link)}" target="_blank" rel="noopener" class="btn btn-primary">
+                Register / More Info →
+            </a>
+            ` : ''}
             <a href="/event/${event.id}" class="btn btn-secondary">View Full Details</a>
         </div>
     `;
 
+    // Animate modal open
     modal.style.display = 'flex';
+    requestAnimationFrame(() => {
+        modal.classList.add('active');
+    });
 }
 
 function closeModal() {
     const modal = document.getElementById('event-modal');
     if (modal) {
-        modal.style.display = 'none';
+        modal.classList.remove('active');
+        setTimeout(() => {
+            modal.style.display = 'none';
+        }, 400);
     }
 }
 
@@ -262,6 +317,61 @@ async function loadGroups() {
     });
 }
 
+// ============ Locations ============
+
+async function loadLocations() {
+    const data = await fetchAPI('/api/locations');
+    if (!data) return;
+
+    allCities = data.cities || [];
+    allCountries = data.countries || [];
+
+    // Populate country dropdown
+    const countrySelect = document.getElementById('country-filter');
+    if (countrySelect) {
+        allCountries.forEach(country => {
+            const option = document.createElement('option');
+            option.value = country;
+            option.textContent = country;
+            countrySelect.appendChild(option);
+        });
+    }
+
+    // Populate city dropdown with all cities initially
+    populateCityDropdown(allCities);
+}
+
+function populateCityDropdown(cities) {
+    const citySelect = document.getElementById('city-filter');
+    if (!citySelect) return;
+
+    // Clear existing options except the first one
+    while (citySelect.options.length > 1) {
+        citySelect.remove(1);
+    }
+
+    cities.forEach(city => {
+        const option = document.createElement('option');
+        option.value = city;
+        option.textContent = city;
+        citySelect.appendChild(option);
+    });
+}
+
+function loadCitiesForCountry() {
+    const countrySelect = document.getElementById('country-filter');
+    const selectedCountry = countrySelect?.value;
+
+    if (!selectedCountry) {
+        // Show all cities if no country selected
+        populateCityDropdown(allCities);
+    } else {
+        // For now, show all cities - we'd need backend support for filtering
+        // In a full implementation, we'd filter cities by country
+        populateCityDropdown(allCities);
+    }
+}
+
 // ============ Filters ============
 
 function applyFilters() {
@@ -271,6 +381,9 @@ function applyFilters() {
         date_to: document.getElementById('date-to')?.value || null,
         chat_id: document.getElementById('group-filter')?.value || null,
         price_type: document.getElementById('price-filter')?.value || null,
+        max_price: document.getElementById('max-price')?.value || null,
+        city: document.getElementById('city-filter')?.value || null,
+        country: document.getElementById('country-filter')?.value || null,
     };
 
     loadEvents(filters);
@@ -283,11 +396,17 @@ function clearFilters() {
     const dateTo = document.getElementById('date-to');
     const groupFilter = document.getElementById('group-filter');
     const priceFilter = document.getElementById('price-filter');
+    const maxPrice = document.getElementById('max-price');
+    const cityFilter = document.getElementById('city-filter');
+    const countryFilter = document.getElementById('country-filter');
 
     if (dateFrom) dateFrom.value = '';
     if (dateTo) dateTo.value = '';
     if (groupFilter) groupFilter.value = '';
     if (priceFilter) priceFilter.value = '';
+    if (maxPrice) maxPrice.value = '';
+    if (cityFilter) cityFilter.value = '';
+    if (countryFilter) countryFilter.value = '';
 
     // Update category active state
     document.querySelectorAll('.category-item').forEach((item, index) => {

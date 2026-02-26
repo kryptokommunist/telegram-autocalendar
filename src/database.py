@@ -80,6 +80,8 @@ def save_event(
     event_start: Optional[datetime],
     event_end: Optional[datetime],
     event_location: Optional[str],
+    city: Optional[str],
+    country: Optional[str],
     event_description: Optional[str],
     event_description_full: Optional[str],
     event_link: Optional[str],
@@ -93,16 +95,18 @@ def save_event(
     query = """
         INSERT INTO events (
             message_id, chat_id, chat_name, event_title, event_start, event_end,
-            event_location, event_description, event_description_full, event_link,
-            ticket_price, organizer, category_id, image_path, original_message
+            event_location, city, country, event_description, event_description_full,
+            event_link, ticket_price, organizer, category_id, image_path, original_message
         ) VALUES (
-            %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s
+            %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s
         )
         ON DUPLICATE KEY UPDATE
             event_title = VALUES(event_title),
             event_start = VALUES(event_start),
             event_end = VALUES(event_end),
             event_location = VALUES(event_location),
+            city = VALUES(city),
+            country = VALUES(country),
             event_description = VALUES(event_description),
             event_description_full = VALUES(event_description_full),
             event_link = VALUES(event_link),
@@ -121,6 +125,8 @@ def save_event(
             event_start,
             event_end,
             event_location,
+            city,
+            country,
             event_description,
             event_description_full,
             event_link,
@@ -139,6 +145,9 @@ def get_events(
     date_to: Optional[datetime] = None,
     chat_id: Optional[int] = None,
     price_type: Optional[str] = None,
+    max_price: Optional[float] = None,
+    city: Optional[str] = None,
+    country: Optional[str] = None,
     limit: int = 100,
     offset: int = 0,
 ) -> list[dict]:
@@ -172,10 +181,50 @@ def get_events(
     elif price_type == "paid":
         query += " AND e.ticket_price IS NOT NULL AND LOWER(e.ticket_price) NOT LIKE '%free%'"
 
+    if max_price is not None:
+        # Filter by max price - extract numeric value from ticket_price
+        # This handles formats like "$25", "25 EUR", "10-50 EUR" (uses first number)
+        query += """ AND (
+            e.ticket_price IS NULL
+            OR LOWER(e.ticket_price) LIKE '%free%'
+            OR CAST(REGEXP_SUBSTR(e.ticket_price, '[0-9]+\\.?[0-9]*') AS DECIMAL(10,2)) <= %s
+        )"""
+        params.append(max_price)
+
+    if city:
+        query += " AND LOWER(e.city) = LOWER(%s)"
+        params.append(city)
+
+    if country:
+        query += " AND LOWER(e.country) = LOWER(%s)"
+        params.append(country)
+
     query += " ORDER BY e.event_start ASC LIMIT %s OFFSET %s"
     params.extend([limit, offset])
 
     return execute_query(query, tuple(params), fetch=True)
+
+
+def get_distinct_cities() -> list[str]:
+    """Get list of distinct cities with events."""
+    query = """
+        SELECT DISTINCT city FROM events
+        WHERE city IS NOT NULL AND city != ''
+        ORDER BY city
+    """
+    results = execute_query(query, fetch=True)
+    return [r["city"] for r in results]
+
+
+def get_distinct_countries() -> list[str]:
+    """Get list of distinct countries with events."""
+    query = """
+        SELECT DISTINCT country FROM events
+        WHERE country IS NOT NULL AND country != ''
+        ORDER BY country
+    """
+    results = execute_query(query, fetch=True)
+    return [r["country"] for r in results]
 
 
 def get_event_by_id(event_id: int) -> Optional[dict]:

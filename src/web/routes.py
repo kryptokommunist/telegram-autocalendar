@@ -41,6 +41,9 @@ def register_routes(app: Flask):
         date_to = request.args.get("date_to")
         chat_id = request.args.get("chat_id", type=int)
         price_type = request.args.get("price_type")
+        max_price = request.args.get("max_price", type=float)
+        city = request.args.get("city")
+        country = request.args.get("country")
         limit = request.args.get("limit", 100, type=int)
         offset = request.args.get("offset", 0, type=int)
 
@@ -64,6 +67,9 @@ def register_routes(app: Flask):
             date_to=date_to_dt,
             chat_id=chat_id,
             price_type=price_type,
+            max_price=max_price,
+            city=city,
+            country=country,
             limit=limit,
             offset=offset,
         )
@@ -105,6 +111,16 @@ def register_routes(app: Flask):
             if group.get("updated_at"):
                 group["updated_at"] = group["updated_at"].isoformat()
         return jsonify(groups)
+
+    @app.route("/api/locations")
+    def api_locations():
+        """Get distinct cities and countries for filtering."""
+        cities = db.get_distinct_cities()
+        countries = db.get_distinct_countries()
+        return jsonify({
+            "cities": cities,
+            "countries": countries,
+        })
 
     @app.route("/api/status")
     def api_status():

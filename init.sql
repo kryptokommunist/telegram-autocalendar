@@ -31,6 +31,8 @@ CREATE TABLE events (
     event_start DATETIME,
     event_end DATETIME,
     event_location VARCHAR(500),
+    city VARCHAR(100),
+    country VARCHAR(100),
     event_description TEXT,
     event_description_full TEXT,
     event_link VARCHAR(1000),
@@ -47,6 +49,8 @@ CREATE TABLE events (
 -- Indexes for filtering
 CREATE INDEX idx_events_category ON events(category_id);
 CREATE INDEX idx_events_start ON events(event_start);
+CREATE INDEX idx_events_city ON events(city);
+CREATE INDEX idx_events_country ON events(country);
 
 -- Processed messages tracking (avoid reprocessing)
 CREATE TABLE processed_messages (

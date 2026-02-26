@@ -20,11 +20,30 @@
             </div>
 
             <div class="filter-group">
-                <label for="price-filter">Price</label>
+                <label for="price-filter">Price Type</label>
                 <select id="price-filter" class="filter-input">
                     <option value="">All</option>
                     <option value="free">Free</option>
                     <option value="paid">Paid</option>
+                </select>
+            </div>
+
+            <div class="filter-group">
+                <label for="max-price">Max Price</label>
+                <input type="number" id="max-price" class="filter-input" placeholder="e.g., 40" min="0">
+            </div>
+
+            <div class="filter-group">
+                <label for="country-filter">Country</label>
+                <select id="country-filter" class="filter-input" onchange="loadCitiesForCountry()">
+                    <option value="">All Countries</option>
+                </select>
+            </div>
+
+            <div class="filter-group">
+                <label for="city-filter">City</label>
+                <select id="city-filter" class="filter-input">
+                    <option value="">All Cities</option>
                 </select>
             </div>
 
@@ -87,6 +106,7 @@
     document.addEventListener('DOMContentLoaded', function() {
         loadCategories();
         loadGroups();
+        loadLocations();
         loadEvents();
         updateSyncStatus();
 
