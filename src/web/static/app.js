@@ -250,18 +250,6 @@ function showEventModal(event) {
         </div>
         ` : ''}
 
-        ${event.event_link ? `
-        <div class="modal-iframe-container">
-            <div style="padding:0.75rem 1rem;background:var(--surface);border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;">
-                <span style="font-size:0.875rem;color:var(--text-muted);">Event Page Preview</span>
-                <a href="${escapeHtml(event.event_link)}" target="_blank" rel="noopener" style="font-size:0.75rem;color:var(--primary);">
-                    Open in new tab ↗
-                </a>
-            </div>
-            <iframe src="${escapeHtml(event.event_link)}" class="modal-iframe" sandbox="allow-scripts allow-same-origin"></iframe>
-        </div>
-        ` : ''}
-
         <div class="modal-actions">
             ${event.event_link ? `
             <a href="${escapeHtml(event.event_link)}" target="_blank" rel="noopener" class="btn btn-primary">
