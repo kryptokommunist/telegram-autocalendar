@@ -47,13 +47,6 @@
                 </select>
             </div>
 
-            <div class="filter-group">
-                <label for="group-filter">Group</label>
-                <select id="group-filter" class="filter-input">
-                    <option value="">All Groups</option>
-                </select>
-            </div>
-
             <button class="btn btn-secondary" onclick="applyFilters()">Apply Filters</button>
             <button class="btn btn-outline" onclick="clearFilters()">Clear</button>
         </div>
@@ -61,6 +54,14 @@
         <div class="categories-section">
             <h3>Categories</h3>
             <div id="categories-list" class="categories-list">
+                <!-- Populated by JS -->
+            </div>
+        </div>
+
+        <div class="categories-section">
+            <h3>Groups</h3>
+            <input type="text" id="group-search" class="filter-input" placeholder="Search groups..." oninput="filterGroupsList()" style="margin-bottom: 0.75rem;">
+            <div id="groups-list" class="categories-list">
                 <!-- Populated by JS -->
             </div>
         </div>

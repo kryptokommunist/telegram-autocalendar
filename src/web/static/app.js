@@ -322,19 +322,81 @@ function getSelectedCategoryName(categoryId) {
 
 // ============ Groups ============
 
+let allGroupsData = [];
+let currentGroupId = null;
+
 async function loadGroups() {
-    const select = document.getElementById('group-filter');
-    if (!select) return;
+    const container = document.getElementById('groups-list');
+    if (!container) return;
 
     const groups = await fetchAPI('/api/groups');
     if (!groups) return;
 
-    groups.forEach(group => {
-        const option = document.createElement('option');
-        option.value = group.chat_id;
-        option.textContent = group.chat_name || `Group ${group.chat_id}`;
-        select.appendChild(option);
+    allGroupsData = groups;
+    renderGroupsList(groups);
+}
+
+function renderGroupsList(groups) {
+    const container = document.getElementById('groups-list');
+    if (!container) return;
+
+    container.innerHTML = '';
+
+    // Add "All Groups" option
+    const allItem = document.createElement('div');
+    allItem.className = `category-item ${currentGroupId === null ? 'active' : ''}`;
+    allItem.onclick = () => selectGroup(null);
+    allItem.innerHTML = `
+        <span class="category-name">All Groups</span>
+        <span class="category-count">${groups.length}</span>
+    `;
+    container.appendChild(allItem);
+
+    // Sort groups by name
+    const sortedGroups = [...groups].sort((a, b) =>
+        (a.chat_name || '').localeCompare(b.chat_name || '')
+    );
+
+    sortedGroups.forEach(group => {
+        const item = document.createElement('div');
+        item.className = `category-item ${currentGroupId === group.chat_id ? 'active' : ''}`;
+        item.onclick = () => selectGroup(group.chat_id);
+
+        const typeIcon = group.chat_type === 'channel' ? '📢' :
+                        group.chat_type === 'supergroup' ? '👥' : '💬';
+
+        item.innerHTML = `
+            <span class="category-name">${typeIcon} ${escapeHtml(group.chat_name || 'Unknown')}</span>
+        `;
+        container.appendChild(item);
     });
+}
+
+function selectGroup(groupId) {
+    currentGroupId = groupId;
+
+    // Update active state
+    const container = document.getElementById('groups-list');
+    if (container) {
+        container.querySelectorAll('.category-item').forEach((item, index) => {
+            item.classList.toggle('active',
+                (groupId === null && index === 0) ||
+                item.onclick?.toString().includes(groupId)
+            );
+        });
+    }
+
+    // Re-render to update active state properly
+    renderGroupsList(allGroupsData);
+    applyFilters();
+}
+
+function filterGroupsList() {
+    const search = document.getElementById('group-search')?.value?.toLowerCase() || '';
+    const filtered = allGroupsData.filter(g =>
+        (g.chat_name || '').toLowerCase().includes(search)
+    );
+    renderGroupsList(filtered);
 }
 
 // ============ Locations ============
@@ -399,7 +461,7 @@ function applyFilters() {
         category_id: currentCategoryId,
         date_from: document.getElementById('date-from')?.value || null,
         date_to: document.getElementById('date-to')?.value || null,
-        chat_id: document.getElementById('group-filter')?.value || null,
+        chat_id: currentGroupId,
         price_type: document.getElementById('price-filter')?.value || null,
         max_price: document.getElementById('max-price')?.value || null,
         city: document.getElementById('city-filter')?.value || null,
@@ -411,27 +473,31 @@ function applyFilters() {
 
 function clearFilters() {
     currentCategoryId = null;
+    currentGroupId = null;
 
     const dateFrom = document.getElementById('date-from');
     const dateTo = document.getElementById('date-to');
-    const groupFilter = document.getElementById('group-filter');
     const priceFilter = document.getElementById('price-filter');
     const maxPrice = document.getElementById('max-price');
     const cityFilter = document.getElementById('city-filter');
     const countryFilter = document.getElementById('country-filter');
+    const groupSearch = document.getElementById('group-search');
 
     if (dateFrom) dateFrom.value = '';
     if (dateTo) dateTo.value = '';
-    if (groupFilter) groupFilter.value = '';
     if (priceFilter) priceFilter.value = '';
     if (maxPrice) maxPrice.value = '';
     if (cityFilter) cityFilter.value = '';
     if (countryFilter) countryFilter.value = '';
+    if (groupSearch) groupSearch.value = '';
 
     // Update category active state
-    document.querySelectorAll('.category-item').forEach((item, index) => {
+    document.querySelectorAll('#categories-list .category-item').forEach((item, index) => {
         item.classList.toggle('active', index === 0);
     });
+
+    // Update group active state
+    renderGroupsList(allGroupsData);
 
     loadEvents();
 }
