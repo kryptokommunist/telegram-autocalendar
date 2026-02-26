@@ -1,0 +1,97 @@
+{% extends "base.html" %}
+
+{% block title %}Events - Telegram Auto-Calendar{% endblock %}
+
+{% block content %}
+<div class="events-page">
+    <!-- Filters Sidebar -->
+    <aside class="sidebar">
+        <div class="filter-section">
+            <h3>Filters</h3>
+
+            <div class="filter-group">
+                <label for="date-from">From Date</label>
+                <input type="date" id="date-from" class="filter-input">
+            </div>
+
+            <div class="filter-group">
+                <label for="date-to">To Date</label>
+                <input type="date" id="date-to" class="filter-input">
+            </div>
+
+            <div class="filter-group">
+                <label for="price-filter">Price</label>
+                <select id="price-filter" class="filter-input">
+                    <option value="">All</option>
+                    <option value="free">Free</option>
+                    <option value="paid">Paid</option>
+                </select>
+            </div>
+
+            <div class="filter-group">
+                <label for="group-filter">Group</label>
+                <select id="group-filter" class="filter-input">
+                    <option value="">All Groups</option>
+                </select>
+            </div>
+
+            <button class="btn btn-secondary" onclick="applyFilters()">Apply Filters</button>
+            <button class="btn btn-outline" onclick="clearFilters()">Clear</button>
+        </div>
+
+        <div class="categories-section">
+            <h3>Categories</h3>
+            <div id="categories-list" class="categories-list">
+                <!-- Populated by JS -->
+            </div>
+        </div>
+    </aside>
+
+    <!-- Events Grid -->
+    <section class="events-section">
+        <div class="events-header">
+            <h1>Upcoming Events</h1>
+            <span id="events-count" class="events-count"></span>
+        </div>
+
+        <div id="events-grid" class="events-grid">
+            <!-- Populated by JS -->
+        </div>
+
+        <div id="loading" class="loading" style="display: none;">
+            <div class="spinner"></div>
+            <p>Loading events...</p>
+        </div>
+
+        <div id="no-events" class="no-events" style="display: none;">
+            <p>No events found. Try adjusting your filters or sync new messages.</p>
+        </div>
+    </section>
+</div>
+
+<!-- Event Modal -->
+<div id="event-modal" class="modal" style="display: none;">
+    <div class="modal-overlay" onclick="closeModal()"></div>
+    <div class="modal-content">
+        <button class="modal-close" onclick="closeModal()">&times;</button>
+        <div id="modal-body">
+            <!-- Populated by JS -->
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    // Initialize page
+    document.addEventListener('DOMContentLoaded', function() {
+        loadCategories();
+        loadGroups();
+        loadEvents();
+        updateSyncStatus();
+
+        // Poll sync status every 5 seconds
+        setInterval(updateSyncStatus, 5000);
+    });
+</script>
+{% endblock %}

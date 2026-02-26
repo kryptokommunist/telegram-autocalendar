@@ -1,0 +1,248 @@
+{% extends "base.html" %}
+
+{% block title %}Telegram Authentication{% endblock %}
+
+{% block content %}
+<div class="auth-page">
+    <div class="auth-container">
+        <h1>Telegram Authentication</h1>
+        <p class="auth-description">
+            Connect your Telegram account to sync messages from your groups and channels.
+        </p>
+
+        <!-- Status Card -->
+        <div id="auth-status-card" class="status-card">
+            <div class="status-icon">⏳</div>
+            <div class="status-text">Checking authentication status...</div>
+        </div>
+
+        <!-- Step 1: Phone Number -->
+        <div id="step-phone" class="auth-step" style="display: none;">
+            <h2>Step 1: Enter Phone Number</h2>
+            <p>Enter your phone number with country code (e.g., +1234567890)</p>
+            <form onsubmit="submitPhone(event)">
+                <div class="form-group">
+                    <input type="tel" id="phone-input" class="form-input"
+                           placeholder="+1234567890" required>
+                </div>
+                <button type="submit" class="btn btn-primary btn-block">
+                    Send Code
+                </button>
+            </form>
+        </div>
+
+        <!-- Step 2: Verification Code -->
+        <div id="step-code" class="auth-step" style="display: none;">
+            <h2>Step 2: Enter Verification Code</h2>
+            <p>Enter the code sent to your Telegram app</p>
+            <form onsubmit="submitCode(event)">
+                <div class="form-group">
+                    <input type="text" id="code-input" class="form-input"
+                           placeholder="12345" maxlength="6" required>
+                </div>
+                <button type="submit" class="btn btn-primary btn-block">
+                    Verify Code
+                </button>
+            </form>
+        </div>
+
+        <!-- Step 3: 2FA Password (if needed) -->
+        <div id="step-2fa" class="auth-step" style="display: none;">
+            <h2>Step 3: Two-Factor Authentication</h2>
+            <p>Enter your 2FA password</p>
+            <form onsubmit="submit2FA(event)">
+                <div class="form-group">
+                    <input type="password" id="2fa-input" class="form-input"
+                           placeholder="Password" required>
+                </div>
+                <button type="submit" class="btn btn-primary btn-block">
+                    Submit Password
+                </button>
+            </form>
+        </div>
+
+        <!-- Success State -->
+        <div id="step-success" class="auth-step" style="display: none;">
+            <div class="success-card">
+                <div class="success-icon">✅</div>
+                <h2>Connected!</h2>
+                <p id="user-info"></p>
+                <a href="/" class="btn btn-primary">Go to Events</a>
+            </div>
+        </div>
+
+        <!-- Error Message -->
+        <div id="error-message" class="error-message" style="display: none;"></div>
+
+        <!-- Sync Status -->
+        <div class="sync-info">
+            <h3>Sync Status</h3>
+            <div id="sync-info-details">
+                <!-- Populated by JS -->
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        checkAuthStatus();
+    });
+
+    async function checkAuthStatus() {
+        try {
+            const response = await fetch('/api/status');
+            const data = await response.json();
+
+            const statusCard = document.getElementById('auth-status-card');
+
+            if (data.authenticated) {
+                statusCard.innerHTML = `
+                    <div class="status-icon status-success">✅</div>
+                    <div class="status-text">Connected as ${data.user?.first_name || 'Unknown'}</div>
+                `;
+                showStep('success');
+                document.getElementById('user-info').textContent =
+                    `Logged in as ${data.user?.first_name} ${data.user?.last_name || ''} (@${data.user?.username || 'N/A'})`;
+            } else {
+                statusCard.innerHTML = `
+                    <div class="status-icon status-pending">🔒</div>
+                    <div class="status-text">Not connected</div>
+                `;
+                showStep('phone');
+            }
+
+            // Update sync info
+            updateSyncInfo(data.sync);
+        } catch (error) {
+            console.error('Error checking auth:', error);
+            showError('Failed to check authentication status');
+        }
+    }
+
+    function showStep(step) {
+        document.querySelectorAll('.auth-step').forEach(el => el.style.display = 'none');
+        document.getElementById(`step-${step}`).style.display = 'block';
+    }
+
+    function showError(message) {
+        const errorEl = document.getElementById('error-message');
+        errorEl.textContent = message;
+        errorEl.style.display = 'block';
+        setTimeout(() => errorEl.style.display = 'none', 5000);
+    }
+
+    async function submitPhone(event) {
+        event.preventDefault();
+        const phone = document.getElementById('phone-input').value;
+
+        try {
+            const response = await fetch('/api/auth/phone', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ phone_number: phone })
+            });
+            const data = await response.json();
+
+            if (data.success) {
+                showStep('code');
+            } else {
+                showError(data.error || 'Failed to send code');
+            }
+        } catch (error) {
+            showError('Network error');
+        }
+    }
+
+    async function submitCode(event) {
+        event.preventDefault();
+        const code = document.getElementById('code-input').value;
+
+        try {
+            const response = await fetch('/api/auth/code', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ code: code })
+            });
+            const data = await response.json();
+
+            if (data.success) {
+                checkAuthStatus();
+            } else if (data.needs_2fa) {
+                showStep('2fa');
+            } else {
+                showError(data.error || 'Invalid code');
+            }
+        } catch (error) {
+            showError('Network error');
+        }
+    }
+
+    async function submit2FA(event) {
+        event.preventDefault();
+        const password = document.getElementById('2fa-input').value;
+
+        try {
+            const response = await fetch('/api/auth/2fa', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ password: password })
+            });
+            const data = await response.json();
+
+            if (data.success) {
+                checkAuthStatus();
+            } else {
+                showError(data.error || 'Invalid password');
+            }
+        } catch (error) {
+            showError('Network error');
+        }
+    }
+
+    function updateSyncInfo(sync) {
+        const container = document.getElementById('sync-info-details');
+        if (!sync) {
+            container.innerHTML = '<p>No sync data available</p>';
+            return;
+        }
+
+        const lastSync = sync.completed_at
+            ? new Date(sync.completed_at).toLocaleString()
+            : 'Never';
+
+        container.innerHTML = `
+            <div class="sync-stat">
+                <span class="sync-label">Status:</span>
+                <span class="sync-value ${sync.status}">${sync.status}</span>
+            </div>
+            <div class="sync-stat">
+                <span class="sync-label">Last Sync:</span>
+                <span class="sync-value">${lastSync}</span>
+            </div>
+            ${sync.status === 'running' ? `
+            <div class="sync-stat">
+                <span class="sync-label">Progress:</span>
+                <span class="sync-value">${sync.groups_scanned}/${sync.groups_total} groups</span>
+            </div>
+            <div class="sync-stat">
+                <span class="sync-label">Messages:</span>
+                <span class="sync-value">${sync.messages_processed}</span>
+            </div>
+            <div class="sync-stat">
+                <span class="sync-label">Events Found:</span>
+                <span class="sync-value">${sync.events_found}</span>
+            </div>
+            ` : ''}
+            ${sync.error_message ? `
+            <div class="sync-stat error">
+                <span class="sync-label">Error:</span>
+                <span class="sync-value">${sync.error_message}</span>
+            </div>
+            ` : ''}
+        `;
+    }
+</script>
+{% endblock %}

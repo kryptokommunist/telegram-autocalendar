@@ -1,0 +1,109 @@
+{% extends "base.html" %}
+
+{% block title %}{{ event.event_title }} - Telegram Events{% endblock %}
+
+{% block content %}
+<div class="event-detail-page">
+    <a href="/" class="back-link">← Back to Events</a>
+
+    <article class="event-detail">
+        {% if event.image_path %}
+        <div class="event-hero">
+            <img src="{{ event.image_path }}" alt="{{ event.event_title }}" class="event-hero-image">
+        </div>
+        {% endif %}
+
+        <div class="event-content">
+            <header class="event-header">
+                {% if event.category_name %}
+                <span class="category-badge">{{ event.category_name }}</span>
+                {% endif %}
+                <h1 class="event-title">{{ event.event_title }}</h1>
+            </header>
+
+            <div class="event-meta">
+                {% if event.event_start %}
+                <div class="meta-item">
+                    <span class="meta-icon">📅</span>
+                    <div class="meta-content">
+                        <strong>Date & Time</strong>
+                        <span>{{ event.event_start.strftime('%A, %B %d, %Y') if event.event_start else 'TBD' }}</span>
+                        {% if event.event_start %}
+                        <span>{{ event.event_start.strftime('%I:%M %p') }}</span>
+                        {% endif %}
+                        {% if event.event_end %}
+                        <span> - {{ event.event_end.strftime('%I:%M %p') }}</span>
+                        {% endif %}
+                    </div>
+                </div>
+                {% endif %}
+
+                {% if event.event_location %}
+                <div class="meta-item">
+                    <span class="meta-icon">📍</span>
+                    <div class="meta-content">
+                        <strong>Location</strong>
+                        <span>{{ event.event_location }}</span>
+                    </div>
+                </div>
+                {% endif %}
+
+                {% if event.ticket_price %}
+                <div class="meta-item">
+                    <span class="meta-icon">🎟️</span>
+                    <div class="meta-content">
+                        <strong>Price</strong>
+                        <span>{{ event.ticket_price }}</span>
+                    </div>
+                </div>
+                {% endif %}
+
+                {% if event.organizer %}
+                <div class="meta-item">
+                    <span class="meta-icon">👤</span>
+                    <div class="meta-content">
+                        <strong>Organizer</strong>
+                        <span>{{ event.organizer }}</span>
+                    </div>
+                </div>
+                {% endif %}
+
+                <div class="meta-item">
+                    <span class="meta-icon">💬</span>
+                    <div class="meta-content">
+                        <strong>Source</strong>
+                        <span>{{ event.chat_name or 'Unknown Group' }}</span>
+                    </div>
+                </div>
+            </div>
+
+            {% if event.event_link %}
+            <div class="event-actions">
+                <a href="{{ event.event_link }}" target="_blank" rel="noopener noreferrer"
+                   class="btn btn-primary btn-large">
+                    Register / More Info →
+                </a>
+            </div>
+            {% endif %}
+
+            <div class="event-description">
+                <h2>About This Event</h2>
+                {% if event.event_description %}
+                <p class="event-summary">{{ event.event_description }}</p>
+                {% endif %}
+
+                {% if event.event_description_full %}
+                <div class="event-full-description">
+                    <h3>Full Description</h3>
+                    <pre class="original-message">{{ event.event_description_full }}</pre>
+                </div>
+                {% endif %}
+            </div>
+
+            <footer class="event-footer">
+                <small>Extracted from Telegram on {{ event.created_at.strftime('%B %d, %Y at %I:%M %p') if event.created_at else 'Unknown' }}</small>
+            </footer>
+        </div>
+    </article>
+</div>
+{% endblock %}

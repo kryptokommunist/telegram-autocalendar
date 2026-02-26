@@ -1,0 +1,257 @@
+"""Flask routes for Telegram Auto-Calendar Bot."""
+
+import asyncio
+import threading
+from datetime import datetime
+from flask import Flask, render_template, request, jsonify
+
+from .. import database as db
+from ..telegram_client import get_telegram_client
+from ..scheduler import process_new_messages
+
+
+def run_async(coro):
+    """Run an async coroutine in a new event loop."""
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+    try:
+        return loop.run_until_complete(coro)
+    finally:
+        loop.close()
+
+
+def register_routes(app: Flask):
+    """Register all routes with the Flask app."""
+
+    # ============ Page Routes ============
+
+    @app.route("/")
+    def index():
+        """Main event calendar view."""
+        return render_template("index.html")
+
+    @app.route("/auth")
+    def auth_page():
+        """Telegram authentication wizard."""
+        return render_template("auth.html")
+
+    @app.route("/event/<int:event_id>")
+    def event_detail(event_id: int):
+        """Single event detail page."""
+        event = db.get_event_by_id(event_id)
+        if not event:
+            return "Event not found", 404
+        return render_template("event.html", event=event)
+
+    # ============ API Routes ============
+
+    @app.route("/api/events")
+    def api_events():
+        """Get events with optional filters."""
+        category_id = request.args.get("category_id", type=int)
+        date_from = request.args.get("date_from")
+        date_to = request.args.get("date_to")
+        chat_id = request.args.get("chat_id", type=int)
+        price_type = request.args.get("price_type")
+        limit = request.args.get("limit", 100, type=int)
+        offset = request.args.get("offset", 0, type=int)
+
+        # Parse dates
+        date_from_dt = None
+        date_to_dt = None
+        if date_from:
+            try:
+                date_from_dt = datetime.fromisoformat(date_from)
+            except ValueError:
+                pass
+        if date_to:
+            try:
+                date_to_dt = datetime.fromisoformat(date_to)
+            except ValueError:
+                pass
+
+        events = db.get_events(
+            category_id=category_id,
+            date_from=date_from_dt,
+            date_to=date_to_dt,
+            chat_id=chat_id,
+            price_type=price_type,
+            limit=limit,
+            offset=offset,
+        )
+
+        # Serialize datetime objects
+        for event in events:
+            for key in ["event_start", "event_end", "created_at"]:
+                if event.get(key):
+                    event[key] = event[key].isoformat()
+
+        return jsonify(events)
+
+    @app.route("/api/events/<int:event_id>")
+    def api_event_detail(event_id: int):
+        """Get single event detail."""
+        event = db.get_event_by_id(event_id)
+        if not event:
+            return jsonify({"error": "Event not found"}), 404
+
+        # Serialize datetime objects
+        for key in ["event_start", "event_end", "created_at"]:
+            if event.get(key):
+                event[key] = event[key].isoformat()
+
+        return jsonify(event)
+
+    @app.route("/api/categories")
+    def api_categories():
+        """Get all categories with event counts."""
+        categories = db.get_all_categories()
+        return jsonify(categories)
+
+    @app.route("/api/groups")
+    def api_groups():
+        """Get all Telegram groups."""
+        groups = db.get_all_telegram_groups()
+        # Serialize datetime objects
+        for group in groups:
+            if group.get("updated_at"):
+                group["updated_at"] = group["updated_at"].isoformat()
+        return jsonify(groups)
+
+    @app.route("/api/status")
+    def api_status():
+        """Get auth status and sync info."""
+        client = get_telegram_client()
+        is_authenticated = run_async(client.is_authenticated())
+
+        user_info = None
+        if is_authenticated:
+            async def get_user():
+                await client.connect()
+                return await client.get_me()
+            user_info = run_async(get_user())
+
+        sync_status = db.get_sync_status()
+
+        # Serialize datetime objects in sync_status
+        for key in ["started_at", "completed_at", "updated_at"]:
+            if sync_status.get(key):
+                sync_status[key] = sync_status[key].isoformat()
+
+        return jsonify({
+            "authenticated": is_authenticated,
+            "user": user_info,
+            "sync": sync_status,
+        })
+
+    # ============ Auth Routes ============
+
+    @app.route("/api/auth/phone", methods=["POST"])
+    def api_auth_phone():
+        """Start auth flow by sending code to phone."""
+        data = request.get_json()
+        phone_number = data.get("phone_number")
+
+        if not phone_number:
+            return jsonify({"error": "Phone number required"}), 400
+
+        client = get_telegram_client()
+
+        async def send_code():
+            await client.connect()
+            return await client.send_code(phone_number)
+
+        try:
+            phone_code_hash = run_async(send_code())
+            db.save_auth_state(phone_number, phone_code_hash, "pending_code")
+            return jsonify({"success": True, "message": "Code sent"})
+        except Exception as e:
+            return jsonify({"error": str(e)}), 500
+
+    @app.route("/api/auth/code", methods=["POST"])
+    def api_auth_code():
+        """Submit verification code."""
+        data = request.get_json()
+        code = data.get("code")
+
+        if not code:
+            return jsonify({"error": "Code required"}), 400
+
+        auth_state = db.get_auth_state()
+        if not auth_state:
+            return jsonify({"error": "No pending auth. Start with phone number."}), 400
+
+        client = get_telegram_client()
+
+        async def sign_in():
+            await client.connect()
+            return await client.sign_in_with_code(
+                auth_state["phone_number"],
+                code,
+                auth_state["phone_code_hash"],
+            )
+
+        result = run_async(sign_in())
+
+        if result.get("success"):
+            db.clear_auth_state()
+            return jsonify({"success": True, "message": "Authenticated successfully"})
+        elif result.get("needs_2fa"):
+            db.update_auth_status("pending_2fa")
+            return jsonify({"success": False, "needs_2fa": True})
+        else:
+            return jsonify({"error": result.get("error", "Unknown error")}), 400
+
+    @app.route("/api/auth/2fa", methods=["POST"])
+    def api_auth_2fa():
+        """Submit 2FA password."""
+        data = request.get_json()
+        password = data.get("password")
+
+        if not password:
+            return jsonify({"error": "Password required"}), 400
+
+        client = get_telegram_client()
+
+        async def sign_in_2fa():
+            await client.connect()
+            return await client.sign_in_with_2fa(password)
+
+        result = run_async(sign_in_2fa())
+
+        if result.get("success"):
+            db.clear_auth_state()
+            return jsonify({"success": True, "message": "Authenticated successfully"})
+        else:
+            return jsonify({"error": result.get("error", "Unknown error")}), 400
+
+    # ============ Sync Routes ============
+
+    @app.route("/api/sync", methods=["POST"])
+    def api_sync():
+        """Trigger manual sync."""
+        sync_status = db.get_sync_status()
+        if sync_status.get("status") == "running":
+            return jsonify({"error": "Sync already running"}), 400
+
+        # Run sync in background thread
+        def run_sync():
+            run_async(process_new_messages())
+
+        thread = threading.Thread(target=run_sync)
+        thread.daemon = True
+        thread.start()
+
+        return jsonify({"success": True, "message": "Sync started"})
+
+    @app.route("/api/sync/status")
+    def api_sync_status():
+        """Get current sync status."""
+        sync_status = db.get_sync_status()
+
+        # Serialize datetime objects
+        for key in ["started_at", "completed_at", "updated_at"]:
+            if sync_status.get(key):
+                sync_status[key] = sync_status[key].isoformat()
+
+        return jsonify(sync_status)

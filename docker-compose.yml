@@ -1,0 +1,66 @@
+version: '3.8'
+
+services:
+  mysql:
+    image: mysql:8.0
+    environment:
+      MYSQL_ROOT_PASSWORD: telegram_events_pass
+      MYSQL_DATABASE: telegram_events
+    volumes:
+      - mysql_data:/var/lib/mysql
+      - ./init.sql:/docker-entrypoint-initdb.d/init.sql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    # NOT exposed to host - internal only
+
+  web:
+    build: .
+    ports:
+      - "5000:5000"
+    environment:
+      - MYSQL_HOST=mysql
+      - MYSQL_USER=root
+      - MYSQL_PASSWORD=telegram_events_pass
+      - MYSQL_DATABASE=telegram_events
+      - GENAI_PROXY_URL=http://host.docker.internal:9988/anthropic/v1/messages
+      - GENAI_API_KEY=sk-aB1cD2eF3gH4jK5lM6nP7qR8sT9uV0wX1yZ2bC3nM4pK5sL6
+      - GENAI_MODEL=anthropic--claude-4.5-opus
+    volumes:
+      - ./.secrets:/app/.secrets:ro
+      - session_data:/app/session
+      - uploads_data:/app/src/web/static/uploads
+    depends_on:
+      mysql:
+        condition: service_healthy
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+  cron:
+    build: .
+    command: ["cron", "-f"]
+    environment:
+      - MYSQL_HOST=mysql
+      - MYSQL_USER=root
+      - MYSQL_PASSWORD=telegram_events_pass
+      - MYSQL_DATABASE=telegram_events
+      - GENAI_PROXY_URL=http://host.docker.internal:9988/anthropic/v1/messages
+      - GENAI_API_KEY=sk-aB1cD2eF3gH4jK5lM6nP7qR8sT9uV0wX1yZ2bC3nM4pK5sL6
+      - GENAI_MODEL=anthropic--claude-4.5-opus
+    volumes:
+      - ./.secrets:/app/.secrets:ro
+      - session_data:/app/session
+      - uploads_data:/app/src/web/static/uploads
+      - ./crontab:/etc/cron.d/telegram-sync
+    depends_on:
+      mysql:
+        condition: service_healthy
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+volumes:
+  mysql_data:
+  session_data:
+  uploads_data:

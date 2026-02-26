@@ -1,0 +1,4 @@
+# Telegram sync cron job - runs daily at 8pm
+0 20 * * * root cd /app && /usr/local/bin/python -m src.scheduler >> /var/log/cron.log 2>&1
+
+# Empty line required at end of crontab file
