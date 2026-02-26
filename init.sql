@@ -37,6 +37,7 @@ CREATE TABLE events (
     event_description TEXT,
     event_description_full TEXT,
     event_link VARCHAR(1000),
+    event_link_normalized VARCHAR(1000),
     ticket_price VARCHAR(100),
     organizer VARCHAR(255),
     event_type ENUM('single', 'multiday', 'recurring', 'series') DEFAULT NULL,
@@ -54,6 +55,7 @@ CREATE INDEX idx_events_start ON events(event_start);
 CREATE INDEX idx_events_city ON events(city);
 CREATE INDEX idx_events_country ON events(country);
 CREATE INDEX idx_events_type ON events(event_type);
+CREATE INDEX idx_events_link_normalized ON events(event_link_normalized(255));
 
 -- Processed messages tracking (avoid reprocessing)
 CREATE TABLE processed_messages (

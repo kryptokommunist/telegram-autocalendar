@@ -5,8 +5,64 @@ from mysql.connector import Error
 from contextlib import contextmanager
 from datetime import datetime
 from typing import Optional
+from urllib.parse import urlparse, urlunparse, parse_qs, urlencode
 
 from .config import Config
+
+
+def normalize_url(url: Optional[str]) -> Optional[str]:
+    """
+    Normalize a URL for consistent comparison and deduplication.
+    - Strip whitespace
+    - Normalize scheme (always https)
+    - Remove www. prefix for consistency
+    - Lowercase the host
+    - Remove trailing slashes from path
+    - Remove common tracking parameters
+    - Sort query parameters
+    """
+    if not url:
+        return None
+
+    url = url.strip()
+    if not url:
+        return None
+
+    try:
+        parsed = urlparse(url)
+
+        # Always use https for consistency (treat http and https as same)
+        scheme = 'https'
+
+        # Lowercase netloc and remove www. prefix
+        netloc = parsed.netloc.lower()
+        if netloc.startswith('www.'):
+            netloc = netloc[4:]
+
+        # Remove trailing slashes from path
+        path = parsed.path.rstrip('/')
+
+        # Parse and clean query parameters
+        query_params = parse_qs(parsed.query, keep_blank_values=False)
+
+        # Remove common tracking parameters
+        tracking_params = {
+            'utm_source', 'utm_medium', 'utm_campaign', 'utm_term', 'utm_content',
+            'fbclid', 'gclid', 'ref', 'source', 'mc_cid', 'mc_eid'
+        }
+        query_params = {k: v for k, v in query_params.items() if k.lower() not in tracking_params}
+
+        # Sort and rebuild query string
+        sorted_query = urlencode(sorted(query_params.items()), doseq=True) if query_params else ''
+
+        # Rebuild URL
+        normalized = urlunparse((scheme, netloc, path, '', sorted_query, ''))
+
+        return normalized if normalized and netloc else None
+
+    except Exception:
+        # If parsing fails, return stripped original
+        return url.strip() if url else None
 
 
 @contextmanager
@@ -72,6 +128,15 @@ def get_or_create_category(name: str) -> int:
 
 # ============ Events ============
 
+def get_event_by_link(event_link_normalized: str) -> Optional[dict]:
+    """Get an event by its normalized event link."""
+    if not event_link_normalized:
+        return None
+    query = "SELECT * FROM events WHERE event_link_normalized = %s LIMIT 1"
+    results = execute_query(query, (event_link_normalized,), fetch=True)
+    return results[0] if results else None
+
+
 def save_event(
     message_id: int,
     chat_id: int,
@@ -91,15 +156,67 @@ def save_event(
     category_id: Optional[int],
     image_path: Optional[str],
     original_message: str,
-) -> int:
-    """Save an event to the database."""
+) -> Optional[int]:
+    """
+    Save an event to the database.
+    Deduplicates by:
+    1. event_link_normalized (if link exists) - same event posted in multiple groups
+    2. message_id + chat_id - same message reprocessed
+    Returns event ID or None if duplicate was updated.
+    """
+    # Normalize the event link for deduplication
+    event_link_normalized = normalize_url(event_link)
+
+    # Check if event with same link already exists
+    if event_link_normalized:
+        existing = get_event_by_link(event_link_normalized)
+        if existing:
+            # Update existing event with potentially newer info
+            update_query = """
+                UPDATE events SET
+                    event_title = COALESCE(%s, event_title),
+                    event_start = COALESCE(%s, event_start),
+                    event_end = COALESCE(%s, event_end),
+                    event_location = COALESCE(%s, event_location),
+                    city = COALESCE(%s, city),
+                    country = COALESCE(%s, country),
+                    event_description = COALESCE(%s, event_description),
+                    ticket_price = COALESCE(%s, ticket_price),
+                    organizer = COALESCE(%s, organizer),
+                    event_type = COALESCE(%s, event_type),
+                    category_id = COALESCE(%s, category_id),
+                    image_path = COALESCE(%s, image_path)
+                WHERE id = %s
+            """
+            execute_query(
+                update_query,
+                (
+                    event_title,
+                    event_start,
+                    event_end,
+                    event_location,
+                    city,
+                    country,
+                    event_description,
+                    ticket_price,
+                    organizer,
+                    event_type,
+                    category_id,
+                    image_path,
+                    existing["id"],
+                ),
+            )
+            return existing["id"]
+
+    # Insert new event (or update if same message_id + chat_id)
     query = """
         INSERT INTO events (
             message_id, chat_id, chat_name, event_title, event_start, event_end,
             event_location, city, country, event_description, event_description_full,
-            event_link, ticket_price, organizer, event_type, category_id, image_path, original_message
+            event_link, event_link_normalized, ticket_price, organizer, event_type,
+            category_id, image_path, original_message
         ) VALUES (
-            %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s
+            %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s
         )
         ON DUPLICATE KEY UPDATE
             event_title = VALUES(event_title),
@@ -111,6 +228,7 @@ def save_event(
             event_description = VALUES(event_description),
             event_description_full = VALUES(event_description_full),
             event_link = VALUES(event_link),
+            event_link_normalized = VALUES(event_link_normalized),
             ticket_price = VALUES(ticket_price),
             organizer = VALUES(organizer),
             event_type = VALUES(event_type),
@@ -132,6 +250,7 @@ def save_event(
             event_description,
             event_description_full,
             event_link,
+            event_link_normalized,
             ticket_price,
             organizer,
             event_type,
