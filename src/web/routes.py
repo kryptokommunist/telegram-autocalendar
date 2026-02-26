@@ -1,23 +1,11 @@
 """Flask routes for Telegram Auto-Calendar Bot."""
 
-import asyncio
 import threading
 from datetime import datetime
 from flask import Flask, render_template, request, jsonify
 
 from .. import database as db
 from ..telegram_client import get_telegram_client
-from ..scheduler import process_new_messages
-
-
-def run_async(coro):
-    """Run an async coroutine in a new event loop."""
-    loop = asyncio.new_event_loop()
-    asyncio.set_event_loop(loop)
-    try:
-        return loop.run_until_complete(coro)
-    finally:
-        loop.close()
 
 
 def register_routes(app: Flask):
@@ -121,15 +109,17 @@ def register_routes(app: Flask):
     @app.route("/api/status")
     def api_status():
         """Get auth status and sync info."""
-        client = get_telegram_client()
-        is_authenticated = run_async(client.is_authenticated())
+        try:
+            client = get_telegram_client()
+            is_authenticated = client.is_authenticated()
 
-        user_info = None
-        if is_authenticated:
-            async def get_user():
-                await client.connect()
-                return await client.get_me()
-            user_info = run_async(get_user())
+            user_info = None
+            if is_authenticated:
+                user_info = client.get_me()
+        except Exception as e:
+            print(f"Error checking auth status: {e}")
+            is_authenticated = False
+            user_info = None
 
         sync_status = db.get_sync_status()
 
@@ -155,14 +145,9 @@ def register_routes(app: Flask):
         if not phone_number:
             return jsonify({"error": "Phone number required"}), 400
 
-        client = get_telegram_client()
-
-        async def send_code():
-            await client.connect()
-            return await client.send_code(phone_number)
-
         try:
-            phone_code_hash = run_async(send_code())
+            client = get_telegram_client()
+            phone_code_hash = client.send_code(phone_number)
             db.save_auth_state(phone_number, phone_code_hash, "pending_code")
             return jsonify({"success": True, "message": "Code sent"})
         except Exception as e:
@@ -181,26 +166,24 @@ def register_routes(app: Flask):
         if not auth_state:
             return jsonify({"error": "No pending auth. Start with phone number."}), 400
 
-        client = get_telegram_client()
-
-        async def sign_in():
-            await client.connect()
-            return await client.sign_in_with_code(
+        try:
+            client = get_telegram_client()
+            result = client.sign_in_with_code(
                 auth_state["phone_number"],
                 code,
                 auth_state["phone_code_hash"],
             )
 
-        result = run_async(sign_in())
-
-        if result.get("success"):
-            db.clear_auth_state()
-            return jsonify({"success": True, "message": "Authenticated successfully"})
-        elif result.get("needs_2fa"):
-            db.update_auth_status("pending_2fa")
-            return jsonify({"success": False, "needs_2fa": True})
-        else:
-            return jsonify({"error": result.get("error", "Unknown error")}), 400
+            if result.get("success"):
+                db.clear_auth_state()
+                return jsonify({"success": True, "message": "Authenticated successfully"})
+            elif result.get("needs_2fa"):
+                db.update_auth_status("pending_2fa")
+                return jsonify({"success": False, "needs_2fa": True})
+            else:
+                return jsonify({"error": result.get("error", "Unknown error")}), 400
+        except Exception as e:
+            return jsonify({"error": str(e)}), 500
 
     @app.route("/api/auth/2fa", methods=["POST"])
     def api_auth_2fa():
@@ -211,19 +194,17 @@ def register_routes(app: Flask):
         if not password:
             return jsonify({"error": "Password required"}), 400
 
-        client = get_telegram_client()
+        try:
+            client = get_telegram_client()
+            result = client.sign_in_with_2fa(password)
 
-        async def sign_in_2fa():
-            await client.connect()
-            return await client.sign_in_with_2fa(password)
-
-        result = run_async(sign_in_2fa())
-
-        if result.get("success"):
-            db.clear_auth_state()
-            return jsonify({"success": True, "message": "Authenticated successfully"})
-        else:
-            return jsonify({"error": result.get("error", "Unknown error")}), 400
+            if result.get("success"):
+                db.clear_auth_state()
+                return jsonify({"success": True, "message": "Authenticated successfully"})
+            else:
+                return jsonify({"error": result.get("error", "Unknown error")}), 400
+        except Exception as e:
+            return jsonify({"error": str(e)}), 500
 
     # ============ Sync Routes ============
 
@@ -234,11 +215,11 @@ def register_routes(app: Flask):
         if sync_status.get("status") == "running":
             return jsonify({"error": "Sync already running"}), 400
 
-        # Run sync in background thread
-        def run_sync():
-            run_async(process_new_messages())
+        # Import here to avoid circular imports
+        from ..scheduler import run_sync_in_thread
 
-        thread = threading.Thread(target=run_sync)
+        # Run sync in background thread
+        thread = threading.Thread(target=run_sync_in_thread)
         thread.daemon = True
         thread.start()
 

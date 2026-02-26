@@ -1,7 +1,6 @@
 """Scheduler for processing Telegram messages and extracting events."""
 
 import asyncio
-import sys
 from datetime import datetime
 
 from . import database as db
@@ -9,10 +8,10 @@ from .telegram_client import get_telegram_client
 from .llm_processor import process_message_for_event
 
 
-async def process_new_messages():
+def process_new_messages():
     """
     Process new messages from all Telegram groups/channels.
-    This is the main function called by cron.
+    This is the main function called by cron or manual sync.
     """
     print(f"\n{'='*60}")
     print(f"Starting sync at {datetime.now().isoformat()}")
@@ -21,9 +20,8 @@ async def process_new_messages():
     client = get_telegram_client()
 
     try:
-        # Connect and check auth
-        is_authenticated = await client.connect()
-        if not is_authenticated:
+        # Check auth
+        if not client.is_authenticated():
             print("ERROR: Not authenticated. Please complete auth via web UI first.")
             db.update_sync_status("error", error_message="Not authenticated")
             return
@@ -32,7 +30,7 @@ async def process_new_messages():
         db.update_sync_status("running")
 
         # Get all dialogs (groups and channels)
-        dialogs = await client.get_dialogs()
+        dialogs = client.get_dialogs()
         print(f"Found {len(dialogs)} groups/channels to process\n")
 
         db.set_sync_progress(
@@ -53,7 +51,7 @@ async def process_new_messages():
             print(f"[{i}/{len(dialogs)}] Processing: {chat_name} ({chat_type})")
 
             # Get group info for context
-            group_info = await client.get_group_info(chat_id)
+            group_info = client.get_group_info(chat_id)
             chat_description = group_info.get("description") if group_info else None
 
             # Save/update group metadata
@@ -68,22 +66,23 @@ async def process_new_messages():
             last_id = db.get_last_processed_id(chat_id) or 0
 
             # Fetch new messages
+            messages = client.get_messages(chat_id, limit=100, min_id=last_id)
             message_count = 0
             event_count = 0
 
-            async for msg in client.get_messages(chat_id, limit=100, min_id=last_id):
+            for msg in messages:
                 message_count += 1
                 total_messages += 1
 
                 # Download image if present
                 image_path = None
-                if msg["has_photo"]:
-                    image_path = await client.download_message_image(
-                        msg["message_obj"], chat_id
+                if msg.get("has_photo") and msg.get("photo"):
+                    image_path = client.download_message_image(
+                        msg["photo"], chat_id, msg["id"]
                     )
 
-                # Process message for event extraction
-                event_id = await process_message_for_event(
+                # Process message for event extraction (this is async)
+                event_id = asyncio.run(process_message_for_event(
                     message_id=msg["id"],
                     chat_id=chat_id,
                     chat_name=chat_name,
@@ -91,7 +90,7 @@ async def process_new_messages():
                     chat_description=chat_description,
                     chat_type=chat_type,
                     image_path=image_path,
-                )
+                ))
 
                 if event_id:
                     event_count += 1
@@ -118,15 +117,19 @@ async def process_new_messages():
 
     except Exception as e:
         print(f"ERROR during sync: {e}")
+        import traceback
+        traceback.print_exc()
         db.update_sync_status("error", error_message=str(e))
-        raise
-    finally:
-        await client.disconnect()
+
+
+def run_sync_in_thread():
+    """Run sync in a thread (for web UI trigger)."""
+    process_new_messages()
 
 
 def main():
-    """Entry point for the scheduler."""
-    asyncio.run(process_new_messages())
+    """Entry point for the scheduler (cron job)."""
+    process_new_messages()
 
 
 if __name__ == "__main__":
