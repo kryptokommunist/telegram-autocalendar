@@ -107,7 +107,7 @@
                 {% if event.event_description_full %}
                 <div class="event-full-description">
                     <h3>Full Description</h3>
-                    <pre class="original-message">{{ event.event_description_full }}</pre>
+                    <div class="original-message formatted-text" id="full-description"></div>
                 </div>
                 {% endif %}
             </div>
@@ -136,7 +136,6 @@
         if (typeof shareEvent === 'function') {
             shareEvent(eventData);
         } else {
-            // Fallback if app.js not loaded
             const text = eventData.event_title;
             const url = eventData.event_link || window.location.href;
             if (navigator.share) {
@@ -145,6 +144,54 @@
                 window.open(`https://wa.me/?text=${encodeURIComponent(text + '\n' + url)}`);
             }
         }
+    }
+
+    // Render formatted description
+    document.addEventListener('DOMContentLoaded', function() {
+        const descContainer = document.getElementById('full-description');
+        if (descContainer) {
+            const rawText = {{ event.event_description_full | tojson }};
+            descContainer.innerHTML = formatTelegramText(rawText);
+        }
+    });
+
+    function formatTelegramText(text) {
+        if (!text) return '';
+
+        // Escape HTML first
+        let html = text
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;');
+
+        // Convert URLs to links
+        html = html.replace(
+            /(https?:\/\/[^\s<]+)/g,
+            '<a href="$1" target="_blank" rel="noopener">$1</a>'
+        );
+
+        // Telegram markdown-style formatting
+        // Bold: **text** or __text__
+        html = html.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+        html = html.replace(/__(.+?)__/g, '<strong>$1</strong>');
+
+        // Italic: *text* or _text_ (but not inside URLs)
+        html = html.replace(/(?<![\/\w])\*([^*\n]+)\*(?![\/\w])/g, '<em>$1</em>');
+        html = html.replace(/(?<![\/\w])_([^_\n]+)_(?![\/\w])/g, '<em>$1</em>');
+
+        // Strikethrough: ~~text~~
+        html = html.replace(/~~(.+?)~~/g, '<del>$1</del>');
+
+        // Code: `text`
+        html = html.replace(/`([^`\n]+)`/g, '<code>$1</code>');
+
+        // Code blocks: ```text```
+        html = html.replace(/```([\s\S]*?)```/g, '<pre><code>$1</code></pre>');
+
+        // Convert newlines to <br>
+        html = html.replace(/\n/g, '<br>');
+
+        return html;
     }
 </script>
 {% endblock %}

@@ -733,6 +733,45 @@ function formatRelativeTime(date) {
     return `${days}d ago`;
 }
 
+function formatTelegramText(text) {
+    if (!text) return '';
+
+    // Escape HTML first
+    let html = text
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;');
+
+    // Convert URLs to links
+    html = html.replace(
+        /(https?:\/\/[^\s<]+)/g,
+        '<a href="$1" target="_blank" rel="noopener">$1</a>'
+    );
+
+    // Telegram markdown-style formatting
+    // Bold: **text** or __text__
+    html = html.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+    html = html.replace(/__(.+?)__/g, '<strong>$1</strong>');
+
+    // Italic: *text* or _text_ (careful not to match URLs)
+    html = html.replace(/(?<![\/:.\w])\*([^*\n]+)\*(?![\/:.\w])/g, '<em>$1</em>');
+    html = html.replace(/(?<![\/:.\w])_([^_\n]+)_(?![\/:.\w])/g, '<em>$1</em>');
+
+    // Strikethrough: ~~text~~
+    html = html.replace(/~~(.+?)~~/g, '<del>$1</del>');
+
+    // Code blocks: ```text```
+    html = html.replace(/```([\s\S]*?)```/g, '<pre><code>$1</code></pre>');
+
+    // Inline code: `text`
+    html = html.replace(/`([^`\n]+)`/g, '<code>$1</code>');
+
+    // Convert newlines to <br>
+    html = html.replace(/\n/g, '<br>');
+
+    return html;
+}
+
 // ============ Share Functionality ============
 
 function buildShareText(event) {
