@@ -1,0 +1,215 @@
+{% extends "base.html" %}
+
+{% block title %}Setup - Select Groups{% endblock %}
+
+{% block content %}
+<div class="setup-page">
+    <div class="setup-header">
+        <h1>Welcome! Let's Get Started</h1>
+        <p>Select which Telegram groups you want to scan for events.</p>
+    </div>
+
+    <div id="loading" class="loading">
+        <div class="spinner"></div>
+        <p>Loading your groups from Telegram...</p>
+    </div>
+
+    <div id="setup-content" style="display: none;">
+        <div class="setup-groups">
+            <div class="section-header">
+                <h2>Your Groups</h2>
+                <div class="section-actions">
+                    <button class="btn btn-outline btn-sm" onclick="selectAll()">Select All</button>
+                    <button class="btn btn-outline btn-sm" onclick="deselectAll()">Deselect All</button>
+                </div>
+            </div>
+
+            <div class="groups-filter">
+                <input type="text" id="group-search" class="filter-input" placeholder="Search groups..." oninput="filterGroups()">
+            </div>
+
+            <div id="groups-list" class="groups-list">
+                <!-- Populated by JS -->
+            </div>
+        </div>
+
+        <div class="setup-footer">
+            <p style="color: var(--text-muted); margin-bottom: 1rem;">
+                You can change this later in Settings.
+            </p>
+            <button id="continue-btn" class="btn btn-primary btn-large" onclick="saveAndContinue()">
+                Continue to Events
+            </button>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    let allGroups = [];
+    let groupSelections = {};
+
+    document.addEventListener('DOMContentLoaded', function() {
+        loadGroupsFromTelegram();
+    });
+
+    async function loadGroupsFromTelegram() {
+        const loading = document.getElementById('loading');
+        const content = document.getElementById('setup-content');
+
+        // First, refresh groups from Telegram
+        await fetchAPI('/api/settings/groups/refresh', { method: 'POST' });
+
+        // Then load them
+        const data = await fetchAPI('/api/settings/groups');
+
+        loading.style.display = 'none';
+        content.style.display = 'block';
+
+        if (!data || !data.groups || data.groups.length === 0) {
+            document.getElementById('groups-list').innerHTML = `
+                <div class="no-groups">
+                    <p>No groups found in your Telegram account.</p>
+                </div>
+            `;
+            return;
+        }
+
+        allGroups = data.groups;
+
+        // Default: select all groups
+        groupSelections = {};
+        data.groups.forEach(g => {
+            groupSelections[g.chat_id] = true;  // Select all by default for initial setup
+        });
+
+        renderGroups(allGroups);
+    }
+
+    function renderGroups(groups) {
+        const list = document.getElementById('groups-list');
+        list.innerHTML = '';
+
+        groups.sort((a, b) => (a.chat_name || '').localeCompare(b.chat_name || ''));
+
+        groups.forEach(group => {
+            const item = document.createElement('div');
+            item.className = `group-item ${groupSelections[group.chat_id] ? 'selected' : ''}`;
+            item.dataset.chatId = group.chat_id;
+
+            const typeIcon = group.chat_type === 'channel' ? '📢' :
+                            group.chat_type === 'supergroup' ? '👥' : '💬';
+
+            item.innerHTML = `
+                <label class="group-checkbox">
+                    <input type="checkbox"
+                           ${groupSelections[group.chat_id] ? 'checked' : ''}
+                           onchange="toggleGroup(${group.chat_id}, this.checked)">
+                    <span class="checkmark"></span>
+                </label>
+                <div class="group-info">
+                    <span class="group-icon">${typeIcon}</span>
+                    <div class="group-details">
+                        <span class="group-name">${escapeHtml(group.chat_name || 'Unknown Group')}</span>
+                        <span class="group-type">${group.chat_type || 'group'}</span>
+                    </div>
+                </div>
+            `;
+
+            list.appendChild(item);
+        });
+
+        updateCount();
+    }
+
+    function toggleGroup(chatId, enabled) {
+        groupSelections[chatId] = enabled;
+
+        const item = document.querySelector(`.group-item[data-chat-id="${chatId}"]`);
+        if (item) {
+            item.classList.toggle('selected', enabled);
+        }
+
+        updateCount();
+    }
+
+    function selectAll() {
+        Object.keys(groupSelections).forEach(id => {
+            groupSelections[id] = true;
+        });
+        document.querySelectorAll('.group-item input[type="checkbox"]').forEach(cb => {
+            cb.checked = true;
+            cb.closest('.group-item').classList.add('selected');
+        });
+        updateCount();
+    }
+
+    function deselectAll() {
+        Object.keys(groupSelections).forEach(id => {
+            groupSelections[id] = false;
+        });
+        document.querySelectorAll('.group-item input[type="checkbox"]').forEach(cb => {
+            cb.checked = false;
+            cb.closest('.group-item').classList.remove('selected');
+        });
+        updateCount();
+    }
+
+    function filterGroups() {
+        const search = document.getElementById('group-search').value.toLowerCase();
+        const filtered = allGroups.filter(g =>
+            (g.chat_name || '').toLowerCase().includes(search)
+        );
+        renderGroups(filtered);
+    }
+
+    function updateCount() {
+        const selected = Object.values(groupSelections).filter(v => v).length;
+        const total = Object.keys(groupSelections).length;
+        document.getElementById('continue-btn').textContent =
+            `Continue with ${selected} group${selected !== 1 ? 's' : ''}`;
+    }
+
+    async function saveAndContinue() {
+        const btn = document.getElementById('continue-btn');
+        btn.disabled = true;
+        btn.textContent = 'Saving...';
+
+        const selections = Object.entries(groupSelections).map(([chat_id, enabled]) => ({
+            chat_id: parseInt(chat_id),
+            enabled: enabled
+        }));
+
+        const result = await fetchAPI('/api/settings/groups', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ groups: selections })
+        });
+
+        if (result?.success) {
+            window.location.href = '/';
+        } else {
+            btn.disabled = false;
+            btn.textContent = 'Error - Try Again';
+        }
+    }
+
+    function escapeHtml(text) {
+        if (!text) return '';
+        const div = document.createElement('div');
+        div.textContent = text;
+        return div.innerHTML;
+    }
+
+    async function fetchAPI(endpoint, options = {}) {
+        try {
+            const response = await fetch(endpoint, options);
+            return await response.json();
+        } catch (error) {
+            console.error(`API error (${endpoint}):`, error);
+            return null;
+        }
+    }
+</script>
+{% endblock %}

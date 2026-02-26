@@ -40,8 +40,19 @@ def process_new_messages():
 
         # Get all dialogs (groups and channels)
         log("Fetching dialogs (groups and channels)...")
-        dialogs = client.get_dialogs()
-        log(f"Found {len(dialogs)} groups/channels to process\n")
+        all_dialogs = client.get_dialogs()
+
+        # Get enabled groups
+        enabled_ids = set(db.get_enabled_group_ids())
+
+        if not enabled_ids:
+            log("No groups are enabled for scanning. Configure groups in Settings.")
+            db.update_sync_status("completed")
+            return
+
+        # Filter to only enabled groups
+        dialogs = [d for d in all_dialogs if d["id"] in enabled_ids]
+        log(f"Found {len(all_dialogs)} total groups, {len(dialogs)} enabled for scanning\n")
 
         db.set_sync_progress(
             groups_total=len(dialogs),
@@ -102,6 +113,7 @@ def process_new_messages():
                             chat_description=chat_description,
                             chat_type=chat_type,
                             image_path=image_path,
+                            message_date=msg.get("date"),
                         ))
 
                         if event_id:

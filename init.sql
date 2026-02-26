@@ -97,3 +97,23 @@ CREATE TABLE sync_status (
 
 -- Insert initial sync status row
 INSERT INTO sync_status (status) VALUES ('idle');
+
+-- Table to track which groups are enabled for scanning
+CREATE TABLE selected_groups (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    chat_id BIGINT NOT NULL UNIQUE,
+    enabled BOOLEAN DEFAULT TRUE,
+    added_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+);
+
+-- User settings
+CREATE TABLE user_settings (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    setting_key VARCHAR(100) NOT NULL UNIQUE,
+    setting_value TEXT,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+);
+
+-- Insert default setting for group selection completed
+INSERT INTO user_settings (setting_key, setting_value) VALUES ('groups_configured', 'false');

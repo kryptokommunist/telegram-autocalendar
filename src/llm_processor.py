@@ -24,10 +24,12 @@ def build_extraction_prompt(
     chat_name: str,
     chat_description: Optional[str],
     chat_type: str,
+    message_date: Optional[datetime] = None,
 ) -> str:
     """Build the prompt for event extraction."""
     categories = get_existing_categories()
     current_date = datetime.now().strftime("%Y-%m-%d")
+    message_date_str = message_date.strftime("%Y-%m-%d %H:%M") if message_date else "Unknown"
 
     return f"""You are an event extraction assistant. Analyze the following Telegram message
 and determine if it announces an event (meetup, party, conference, workshop, etc.).
@@ -36,6 +38,7 @@ SOURCE CONTEXT:
 - Group/Channel name: {chat_name}
 - Group/Channel description: {chat_description or 'Not available'}
 - Type: {chat_type}
+- Message posted on: {message_date_str}
 
 EXISTING CATEGORIES (prefer these, but create new if none fit):
 {categories}
@@ -58,6 +61,7 @@ Return JSON only, no other text:
   "event_description": "1-2 sentence summary"
 }}
 
+IMPORTANT: Use the message date as context for relative dates (e.g., "this Saturday", "next week").
 Today's date: {current_date}
 
 Message:
@@ -69,13 +73,14 @@ async def extract_event(
     chat_name: str,
     chat_description: Optional[str] = None,
     chat_type: str = "group",
+    message_date: Optional[datetime] = None,
 ) -> Optional[dict]:
     """
     Extract event information from a message using Claude.
     Returns parsed event data or None if not an event.
     """
     prompt = build_extraction_prompt(
-        message_text, chat_name, chat_description, chat_type
+        message_text, chat_name, chat_description, chat_type, message_date
     )
 
     try:
@@ -170,6 +175,7 @@ async def process_message_for_event(
     chat_description: Optional[str] = None,
     chat_type: str = "group",
     image_path: Optional[str] = None,
+    message_date: Optional[datetime] = None,
 ) -> Optional[int]:
     """
     Process a message and save as event if applicable.
@@ -181,7 +187,7 @@ async def process_message_for_event(
 
     # Extract event using LLM
     event_data = await extract_event(
-        message_text, chat_name, chat_description, chat_type
+        message_text, chat_name, chat_description, chat_type, message_date
     )
 
     # Mark as processed regardless of result

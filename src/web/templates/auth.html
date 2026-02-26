@@ -67,7 +67,7 @@
                 <div class="success-icon">✅</div>
                 <h2>Connected!</h2>
                 <p id="user-info"></p>
-                <a href="/" class="btn btn-primary">Go to Events</a>
+                <a href="/" class="btn btn-primary" id="success-link">Go to Events</a>
             </div>
         </div>
 
@@ -106,6 +106,16 @@
                 showStep('success');
                 document.getElementById('user-info').textContent =
                     `Logged in as ${data.user?.first_name} ${data.user?.last_name || ''} (@${data.user?.username || 'N/A'})`;
+
+                // Check if groups are configured - if not, redirect to setup
+                const configResponse = await fetch('/api/settings/configured');
+                const configData = await configResponse.json();
+
+                const successLink = document.getElementById('success-link');
+                if (!configData.configured) {
+                    successLink.href = '/setup';
+                    successLink.textContent = 'Select Groups to Scan';
+                }
             } else {
                 statusCard.innerHTML = `
                     <div class="status-icon status-pending">🔒</div>

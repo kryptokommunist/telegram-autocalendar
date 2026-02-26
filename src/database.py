@@ -434,3 +434,145 @@ def reset_sync_status():
             updated_at = NOW()
     """
     execute_query(query)
+
+
+# ============ Selected Groups ============
+
+def get_selected_groups() -> list[dict]:
+    """Get all groups with their selection status."""
+    query = """
+        SELECT sg.chat_id, sg.enabled, sg.added_at,
+               tg.chat_name, tg.chat_description, tg.chat_type
+        FROM selected_groups sg
+        LEFT JOIN telegram_groups tg ON sg.chat_id = tg.chat_id
+        ORDER BY tg.chat_name
+    """
+    return execute_query(query, fetch=True)
+
+
+def get_enabled_group_ids() -> list[int]:
+    """Get list of chat_ids that are enabled for scanning."""
+    query = "SELECT chat_id FROM selected_groups WHERE enabled = TRUE"
+    results = execute_query(query, fetch=True)
+    return [r["chat_id"] for r in results]
+
+
+def set_group_enabled(chat_id: int, enabled: bool):
+    """Enable or disable a group for scanning."""
+    query = """
+        INSERT INTO selected_groups (chat_id, enabled)
+        VALUES (%s, %s)
+        ON DUPLICATE KEY UPDATE enabled = VALUES(enabled)
+    """
+    execute_query(query, (chat_id, enabled))
+
+
+def bulk_set_groups(group_selections: list[dict]):
+    """Bulk update group selections. Each dict has chat_id and enabled."""
+    with get_connection() as conn:
+        cursor = conn.cursor()
+        for group in group_selections:
+            cursor.execute(
+                """
+                INSERT INTO selected_groups (chat_id, enabled)
+                VALUES (%s, %s)
+                ON DUPLICATE KEY UPDATE enabled = VALUES(enabled)
+                """,
+                (group["chat_id"], group["enabled"])
+            )
+        conn.commit()
+        cursor.close()
+
+
+def sync_available_groups(available_chat_ids: list[int]):
+    """
+    Sync available groups from Telegram.
+    - Add new groups as disabled (user must explicitly enable)
+    - Keep existing selections
+    - Mark removed groups (but don't delete to preserve history)
+    Returns: dict with 'new' and 'removed' group counts
+    """
+    with get_connection() as conn:
+        cursor = conn.cursor(dictionary=True)
+
+        # Get currently tracked groups
+        cursor.execute("SELECT chat_id, enabled FROM selected_groups")
+        existing = {row["chat_id"]: row["enabled"] for row in cursor.fetchall()}
+
+        existing_ids = set(existing.keys())
+        available_ids = set(available_chat_ids)
+
+        # New groups (in Telegram but not in our DB)
+        new_ids = available_ids - existing_ids
+        # Removed groups (in our DB but no longer in Telegram)
+        removed_ids = existing_ids - available_ids
+
+        # Add new groups as disabled by default
+        for chat_id in new_ids:
+            cursor.execute(
+                "INSERT INTO selected_groups (chat_id, enabled) VALUES (%s, FALSE)",
+                (chat_id,)
+            )
+
+        conn.commit()
+        cursor.close()
+
+        return {
+            "new_count": len(new_ids),
+            "removed_count": len(removed_ids),
+            "new_ids": list(new_ids),
+            "removed_ids": list(removed_ids),
+        }
+
+
+def is_group_selected(chat_id: int) -> bool:
+    """Check if a group is enabled for scanning."""
+    query = "SELECT enabled FROM selected_groups WHERE chat_id = %s"
+    results = execute_query(query, (chat_id,), fetch=True)
+    return results[0]["enabled"] if results else False
+
+
+def get_new_unselected_groups() -> list[dict]:
+    """Get groups that were recently added but not yet reviewed by user."""
+    query = """
+        SELECT sg.chat_id, sg.added_at, tg.chat_name, tg.chat_type
+        FROM selected_groups sg
+        LEFT JOIN telegram_groups tg ON sg.chat_id = tg.chat_id
+        WHERE sg.enabled = FALSE
+        AND sg.added_at > (
+            SELECT COALESCE(MAX(updated_at), '1970-01-01')
+            FROM user_settings WHERE setting_key = 'groups_configured'
+        )
+        ORDER BY sg.added_at DESC
+    """
+    return execute_query(query, fetch=True)
+
+
+# ============ User Settings ============
+
+def get_setting(key: str) -> Optional[str]:
+    """Get a user setting value."""
+    query = "SELECT setting_value FROM user_settings WHERE setting_key = %s"
+    results = execute_query(query, (key,), fetch=True)
+    return results[0]["setting_value"] if results else None
+
+
+def set_setting(key: str, value: str):
+    """Set a user setting value."""
+    query = """
+        INSERT INTO user_settings (setting_key, setting_value)
+        VALUES (%s, %s)
+        ON DUPLICATE KEY UPDATE setting_value = VALUES(setting_value)
+    """
+    execute_query(query, (key, value))
+
+
+def is_groups_configured() -> bool:
+    """Check if user has completed initial group configuration."""
+    value = get_setting("groups_configured")
+    return value == "true"
+
+
+def mark_groups_configured():
+    """Mark that user has completed initial group configuration."""
+    set_setting("groups_configured", "true")

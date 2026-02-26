@@ -1,0 +1,299 @@
+{% extends "base.html" %}
+
+{% block title %}Settings - Telegram Auto-Calendar{% endblock %}
+
+{% block content %}
+<div class="settings-page">
+    <div class="settings-header">
+        <h1>Settings</h1>
+        <p class="settings-description">Configure which Telegram groups to scan for events.</p>
+    </div>
+
+    <!-- New Groups Alert -->
+    <div id="new-groups-alert" class="alert alert-info" style="display: none;">
+        <span class="alert-icon">🆕</span>
+        <div class="alert-content">
+            <strong>New groups detected!</strong>
+            <p id="new-groups-message"></p>
+        </div>
+    </div>
+
+    <!-- Group Selection -->
+    <div class="settings-section">
+        <div class="section-header">
+            <h2>Groups to Scan</h2>
+            <div class="section-actions">
+                <button class="btn btn-outline btn-sm" onclick="selectAll()">Select All</button>
+                <button class="btn btn-outline btn-sm" onclick="deselectAll()">Deselect All</button>
+                <button class="btn btn-outline btn-sm" onclick="refreshGroups()">
+                    <span class="refresh-icon">🔄</span> Refresh from Telegram
+                </button>
+            </div>
+        </div>
+
+        <div class="groups-filter">
+            <input type="text" id="group-search" class="filter-input" placeholder="Search groups..." oninput="filterGroups()">
+        </div>
+
+        <div id="groups-loading" class="loading">
+            <div class="spinner"></div>
+            <p>Loading groups...</p>
+        </div>
+
+        <div id="groups-list" class="groups-list" style="display: none;">
+            <!-- Populated by JS -->
+        </div>
+
+        <div id="no-groups" class="no-groups" style="display: none;">
+            <p>No groups found. Make sure you're authenticated with Telegram.</p>
+            <a href="/auth" class="btn btn-primary">Go to Authentication</a>
+        </div>
+    </div>
+
+    <!-- Save Button -->
+    <div class="settings-footer">
+        <button id="save-btn" class="btn btn-primary btn-large" onclick="saveSettings()">
+            Save Settings
+        </button>
+        <span id="save-status" class="save-status"></span>
+    </div>
+
+    <!-- Stats -->
+    <div class="settings-section stats-section">
+        <h2>Statistics</h2>
+        <div id="stats-grid" class="stats-grid">
+            <!-- Populated by JS -->
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    let allGroups = [];
+    let groupSelections = {};
+
+    document.addEventListener('DOMContentLoaded', function() {
+        loadGroups();
+        checkNewGroups();
+    });
+
+    async function loadGroups() {
+        const loading = document.getElementById('groups-loading');
+        const list = document.getElementById('groups-list');
+        const noGroups = document.getElementById('no-groups');
+
+        loading.style.display = 'block';
+        list.style.display = 'none';
+        noGroups.style.display = 'none';
+
+        const data = await fetchAPI('/api/settings/groups');
+
+        loading.style.display = 'none';
+
+        if (!data || !data.groups || data.groups.length === 0) {
+            noGroups.style.display = 'block';
+            return;
+        }
+
+        allGroups = data.groups;
+        groupSelections = {};
+        data.groups.forEach(g => {
+            groupSelections[g.chat_id] = g.enabled;
+        });
+
+        renderGroups(allGroups);
+        renderStats(data.stats);
+        list.style.display = 'block';
+    }
+
+    function renderGroups(groups) {
+        const list = document.getElementById('groups-list');
+        list.innerHTML = '';
+
+        // Sort: enabled first, then by name
+        groups.sort((a, b) => {
+            if (a.enabled !== b.enabled) return b.enabled - a.enabled;
+            return (a.chat_name || '').localeCompare(b.chat_name || '');
+        });
+
+        groups.forEach(group => {
+            const item = document.createElement('div');
+            item.className = `group-item ${groupSelections[group.chat_id] ? 'selected' : ''}`;
+            item.dataset.chatId = group.chat_id;
+
+            const typeIcon = group.chat_type === 'channel' ? '📢' :
+                            group.chat_type === 'supergroup' ? '👥' : '💬';
+
+            item.innerHTML = `
+                <label class="group-checkbox">
+                    <input type="checkbox"
+                           ${groupSelections[group.chat_id] ? 'checked' : ''}
+                           onchange="toggleGroup(${group.chat_id}, this.checked)">
+                    <span class="checkmark"></span>
+                </label>
+                <div class="group-info">
+                    <span class="group-icon">${typeIcon}</span>
+                    <div class="group-details">
+                        <span class="group-name">${escapeHtml(group.chat_name || 'Unknown Group')}</span>
+                        <span class="group-type">${group.chat_type || 'group'}</span>
+                    </div>
+                </div>
+                ${group.is_new ? '<span class="new-badge">NEW</span>' : ''}
+            `;
+
+            list.appendChild(item);
+        });
+    }
+
+    function toggleGroup(chatId, enabled) {
+        groupSelections[chatId] = enabled;
+
+        const item = document.querySelector(`.group-item[data-chat-id="${chatId}"]`);
+        if (item) {
+            item.classList.toggle('selected', enabled);
+        }
+
+        updateSaveButton();
+    }
+
+    function selectAll() {
+        Object.keys(groupSelections).forEach(id => {
+            groupSelections[id] = true;
+        });
+        document.querySelectorAll('.group-item input[type="checkbox"]').forEach(cb => {
+            cb.checked = true;
+            cb.closest('.group-item').classList.add('selected');
+        });
+        updateSaveButton();
+    }
+
+    function deselectAll() {
+        Object.keys(groupSelections).forEach(id => {
+            groupSelections[id] = false;
+        });
+        document.querySelectorAll('.group-item input[type="checkbox"]').forEach(cb => {
+            cb.checked = false;
+            cb.closest('.group-item').classList.remove('selected');
+        });
+        updateSaveButton();
+    }
+
+    function filterGroups() {
+        const search = document.getElementById('group-search').value.toLowerCase();
+        const filtered = allGroups.filter(g =>
+            (g.chat_name || '').toLowerCase().includes(search)
+        );
+        renderGroups(filtered);
+    }
+
+    async function refreshGroups() {
+        const btn = document.querySelector('.refresh-icon');
+        if (btn) btn.style.animation = 'spin 1s linear infinite';
+
+        const result = await fetchAPI('/api/settings/groups/refresh', { method: 'POST' });
+
+        if (btn) btn.style.animation = '';
+
+        if (result?.new_count > 0) {
+            alert(`Found ${result.new_count} new group(s)!`);
+        } else if (result?.error) {
+            alert('Error: ' + result.error);
+        } else {
+            alert('Groups are up to date.');
+        }
+
+        loadGroups();
+    }
+
+    async function saveSettings() {
+        const btn = document.getElementById('save-btn');
+        const status = document.getElementById('save-status');
+
+        btn.disabled = true;
+        btn.textContent = 'Saving...';
+
+        const selections = Object.entries(groupSelections).map(([chat_id, enabled]) => ({
+            chat_id: parseInt(chat_id),
+            enabled: enabled
+        }));
+
+        const result = await fetchAPI('/api/settings/groups', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ groups: selections })
+        });
+
+        btn.disabled = false;
+        btn.textContent = 'Save Settings';
+
+        if (result?.success) {
+            status.textContent = 'Saved!';
+            status.className = 'save-status success';
+            setTimeout(() => {
+                status.textContent = '';
+            }, 3000);
+        } else {
+            status.textContent = 'Error saving settings';
+            status.className = 'save-status error';
+        }
+    }
+
+    function updateSaveButton() {
+        // Visual indicator that there are unsaved changes
+        const btn = document.getElementById('save-btn');
+        btn.textContent = 'Save Settings *';
+    }
+
+    async function checkNewGroups() {
+        const data = await fetchAPI('/api/settings/groups/new');
+        if (data?.groups && data.groups.length > 0) {
+            const alert = document.getElementById('new-groups-alert');
+            const message = document.getElementById('new-groups-message');
+            message.textContent = `${data.groups.length} new group(s) have been added to your Telegram. Review them below.`;
+            alert.style.display = 'flex';
+        }
+    }
+
+    function renderStats(stats) {
+        const grid = document.getElementById('stats-grid');
+        if (!grid || !stats) return;
+
+        grid.innerHTML = `
+            <div class="stat-card">
+                <span class="stat-value">${stats.total_groups}</span>
+                <span class="stat-label">Total Groups</span>
+            </div>
+            <div class="stat-card">
+                <span class="stat-value">${stats.enabled_groups}</span>
+                <span class="stat-label">Groups Enabled</span>
+            </div>
+            <div class="stat-card">
+                <span class="stat-value">${stats.total_events}</span>
+                <span class="stat-label">Events Found</span>
+            </div>
+            <div class="stat-card">
+                <span class="stat-value">${stats.total_messages}</span>
+                <span class="stat-label">Messages Processed</span>
+            </div>
+        `;
+    }
+
+    function escapeHtml(text) {
+        if (!text) return '';
+        const div = document.createElement('div');
+        div.textContent = text;
+        return div.innerHTML;
+    }
+
+    async function fetchAPI(endpoint, options = {}) {
+        try {
+            const response = await fetch(endpoint, options);
+            return await response.json();
+        } catch (error) {
+            console.error(`API error (${endpoint}):`, error);
+            return null;
+        }
+    }
+</script>
+{% endblock %}

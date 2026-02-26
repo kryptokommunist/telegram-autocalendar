@@ -252,3 +252,113 @@ def register_routes(app: Flask):
                 sync_status[key] = sync_status[key].isoformat()
 
         return jsonify(sync_status)
+
+    # ============ Settings Routes ============
+
+    @app.route("/settings")
+    def settings_page():
+        """Settings page for group management."""
+        return render_template("settings.html")
+
+    @app.route("/setup")
+    def setup_page():
+        """Initial setup page for group selection."""
+        return render_template("setup.html")
+
+    @app.route("/api/settings/groups")
+    def api_settings_groups():
+        """Get all groups with selection status."""
+        try:
+            # Get groups from database
+            groups = db.get_selected_groups()
+
+            # Also get telegram groups info to merge
+            tg_groups = db.get_all_telegram_groups()
+            tg_map = {g["chat_id"]: g for g in tg_groups}
+
+            # Merge data
+            result = []
+            for g in groups:
+                chat_id = g["chat_id"]
+                tg = tg_map.get(chat_id, {})
+                result.append({
+                    "chat_id": chat_id,
+                    "chat_name": g.get("chat_name") or tg.get("chat_name") or f"Group {chat_id}",
+                    "chat_type": g.get("chat_type") or tg.get("chat_type") or "group",
+                    "enabled": g["enabled"],
+                    "is_new": False,  # Could track this with timestamps
+                })
+
+            # Stats
+            enabled_count = sum(1 for g in result if g["enabled"])
+            total_events = len(db.get_events(limit=10000))
+
+            return jsonify({
+                "groups": result,
+                "stats": {
+                    "total_groups": len(result),
+                    "enabled_groups": enabled_count,
+                    "total_events": total_events,
+                    "total_messages": 0,  # Could query processed_messages
+                }
+            })
+        except Exception as e:
+            return jsonify({"error": str(e)}), 500
+
+    @app.route("/api/settings/groups", methods=["POST"])
+    def api_settings_groups_save():
+        """Save group selections."""
+        data = request.get_json()
+        groups = data.get("groups", [])
+
+        try:
+            db.bulk_set_groups(groups)
+            db.mark_groups_configured()
+            return jsonify({"success": True})
+        except Exception as e:
+            return jsonify({"error": str(e)}), 500
+
+    @app.route("/api/settings/groups/refresh", methods=["POST"])
+    def api_settings_groups_refresh():
+        """Refresh groups from Telegram."""
+        try:
+            client = get_telegram_client()
+            if not client.is_authenticated():
+                return jsonify({"error": "Not authenticated"}), 401
+
+            # Get dialogs from Telegram
+            dialogs = client.get_dialogs()
+
+            # Save group metadata
+            for dialog in dialogs:
+                db.save_telegram_group(
+                    chat_id=dialog["id"],
+                    chat_name=dialog["name"],
+                    chat_description=None,
+                    chat_type=dialog["type"],
+                )
+
+            # Sync available groups
+            chat_ids = [d["id"] for d in dialogs]
+            result = db.sync_available_groups(chat_ids)
+
+            return jsonify({
+                "success": True,
+                "new_count": result["new_count"],
+                "removed_count": result["removed_count"],
+            })
+        except Exception as e:
+            return jsonify({"error": str(e)}), 500
+
+    @app.route("/api/settings/groups/new")
+    def api_settings_new_groups():
+        """Get newly added groups that haven't been reviewed."""
+        groups = db.get_new_unselected_groups()
+        return jsonify({"groups": groups})
+
+    @app.route("/api/settings/configured")
+    def api_settings_configured():
+        """Check if initial group setup is complete."""
+        return jsonify({
+            "configured": db.is_groups_configured()
+        })
