@@ -66,6 +66,14 @@ function createEventCard(event) {
         ? `<img src="${event.image_path}" alt="${escapeHtml(event.event_title)}" class="event-card-image">`
         : `<div class="event-card-placeholder">📅</div>`;
 
+    // Share button for card
+    const shareBtn = document.createElement('button');
+    shareBtn.className = 'event-card-share';
+    shareBtn.innerHTML = '↗';
+    shareBtn.title = 'Share event';
+    shareBtn.onclick = (e) => shareEvent(event, e);
+    card.appendChild(shareBtn);
+
     const dateStr = event.event_start
         ? formatDate(event.event_start)
         : 'Date TBD';
@@ -214,8 +222,20 @@ function showEventModal(event) {
             </a>
             ` : ''}
             <a href="/event/${event.id}" class="btn btn-secondary">View Full Details</a>
+            <a href="https://t.me/c/${String(event.chat_id).replace('-100', '')}/${event.message_id}"
+               target="_blank" rel="noopener" class="btn btn-outline" title="View original message in Telegram">
+                <span>✈️</span> Telegram
+            </a>
+            <div class="share-container">
+                <button class="share-btn" onclick="shareEvent(window._currentModalEvent, event)">
+                    <span>↗</span> Share
+                </button>
+            </div>
         </div>
     `;
+
+    // Store current event for share button
+    window._currentModalEvent = event;
 
     // Animate modal open
     modal.style.display = 'flex';
@@ -523,4 +543,181 @@ function formatRelativeTime(date) {
     if (minutes < 60) return `${minutes}m ago`;
     if (hours < 24) return `${hours}h ago`;
     return `${days}d ago`;
+}
+
+// ============ Share Functionality ============
+
+function buildShareText(event) {
+    let text = `${event.event_title}`;
+
+    if (event.event_start) {
+        text += `\n📅 ${formatDate(event.event_start)}`;
+        const time = formatTime(event.event_start);
+        if (time) text += ` at ${time}`;
+    }
+
+    if (event.city || event.event_location) {
+        text += `\n📍 ${event.city || event.event_location}`;
+    }
+
+    if (event.ticket_price) {
+        text += `\n🎟️ ${event.ticket_price}`;
+    }
+
+    return text;
+}
+
+function getShareUrl(event) {
+    // Use event link if available, otherwise link to our event page
+    if (event.event_link) {
+        return event.event_link;
+    }
+    return `${window.location.origin}/event/${event.id}`;
+}
+
+async function shareEvent(event, e) {
+    if (e) {
+        e.stopPropagation();
+        e.preventDefault();
+    }
+
+    const shareText = buildShareText(event);
+    const shareUrl = getShareUrl(event);
+
+    // Try native Web Share API first (works great on mobile)
+    if (navigator.share) {
+        try {
+            await navigator.share({
+                title: event.event_title,
+                text: shareText,
+                url: shareUrl,
+            });
+            return;
+        } catch (err) {
+            // User cancelled or error, fall through to dropdown
+            if (err.name === 'AbortError') return;
+        }
+    }
+
+    // Show share dropdown
+    showShareDropdown(event, e?.target);
+}
+
+function showShareDropdown(event, targetBtn) {
+    // Remove any existing dropdowns
+    document.querySelectorAll('.share-dropdown').forEach(d => d.remove());
+
+    const shareText = buildShareText(event);
+    const shareUrl = getShareUrl(event);
+    const encodedText = encodeURIComponent(shareText);
+    const encodedUrl = encodeURIComponent(shareUrl);
+    const encodedTitle = encodeURIComponent(event.event_title);
+    const fullText = encodeURIComponent(`${shareText}\n\n${shareUrl}`);
+
+    const dropdown = document.createElement('div');
+    dropdown.className = 'share-dropdown';
+    dropdown.innerHTML = `
+        <div class="share-dropdown-title">Share via</div>
+        <div class="share-grid">
+            <a href="https://wa.me/?text=${fullText}" target="_blank" rel="noopener" class="share-option" onclick="event.stopPropagation()">
+                <span class="share-icon whatsapp">💬</span>
+                <span class="share-label">WhatsApp</span>
+            </a>
+            <a href="https://t.me/share/url?url=${encodedUrl}&text=${encodedText}" target="_blank" rel="noopener" class="share-option" onclick="event.stopPropagation()">
+                <span class="share-icon telegram">✈️</span>
+                <span class="share-label">Telegram</span>
+            </a>
+            <a href="https://signal.me/#p/?text=${fullText}" target="_blank" rel="noopener" class="share-option" onclick="event.stopPropagation()">
+                <span class="share-icon signal">💙</span>
+                <span class="share-label">Signal</span>
+            </a>
+            <a href="sms:?body=${fullText}" class="share-option" onclick="event.stopPropagation()">
+                <span class="share-icon sms">📱</span>
+                <span class="share-label">SMS</span>
+            </a>
+            <a href="mailto:?subject=${encodedTitle}&body=${fullText}" class="share-option" onclick="event.stopPropagation()">
+                <span class="share-icon email">📧</span>
+                <span class="share-label">Email</span>
+            </a>
+            <a href="https://www.facebook.com/sharer/sharer.php?u=${encodedUrl}&quote=${encodedText}" target="_blank" rel="noopener" class="share-option" onclick="event.stopPropagation()">
+                <span class="share-icon facebook">📘</span>
+                <span class="share-label">Facebook</span>
+            </a>
+            <a href="https://twitter.com/intent/tweet?text=${encodedText}&url=${encodedUrl}" target="_blank" rel="noopener" class="share-option" onclick="event.stopPropagation()">
+                <span class="share-icon twitter">🐦</span>
+                <span class="share-label">Twitter</span>
+            </a>
+            <button class="share-option" onclick="copyShareLink('${shareUrl}', '${shareText.replace(/'/g, "\\'")}', this); event.stopPropagation()">
+                <span class="share-icon copy">📋</span>
+                <span class="share-label">Copy Link</span>
+            </button>
+        </div>
+    `;
+
+    // Position dropdown
+    if (targetBtn) {
+        const container = targetBtn.closest('.share-container') || targetBtn.parentElement;
+        container.style.position = 'relative';
+        container.appendChild(dropdown);
+    } else {
+        // Append to body and position in center
+        dropdown.style.position = 'fixed';
+        dropdown.style.top = '50%';
+        dropdown.style.left = '50%';
+        dropdown.style.transform = 'translate(-50%, -50%) scale(0.9)';
+        dropdown.style.bottom = 'auto';
+        document.body.appendChild(dropdown);
+    }
+
+    // Animate in
+    requestAnimationFrame(() => {
+        dropdown.classList.add('active');
+    });
+
+    // Close on outside click
+    const closeDropdown = (e) => {
+        if (!dropdown.contains(e.target)) {
+            dropdown.classList.remove('active');
+            setTimeout(() => dropdown.remove(), 250);
+            document.removeEventListener('click', closeDropdown);
+        }
+    };
+
+    setTimeout(() => {
+        document.addEventListener('click', closeDropdown);
+    }, 100);
+}
+
+async function copyShareLink(url, text, btn) {
+    const fullText = `${text}\n\n${url}`;
+
+    try {
+        await navigator.clipboard.writeText(fullText);
+
+        // Visual feedback
+        btn.classList.add('copied');
+        btn.querySelector('.share-label').textContent = 'Copied!';
+
+        setTimeout(() => {
+            btn.classList.remove('copied');
+            btn.querySelector('.share-label').textContent = 'Copy Link';
+        }, 2000);
+    } catch (err) {
+        // Fallback for older browsers
+        const textarea = document.createElement('textarea');
+        textarea.value = fullText;
+        textarea.style.position = 'fixed';
+        textarea.style.opacity = '0';
+        document.body.appendChild(textarea);
+        textarea.select();
+        document.execCommand('copy');
+        document.body.removeChild(textarea);
+
+        btn.classList.add('copied');
+        btn.querySelector('.share-label').textContent = 'Copied!';
+        setTimeout(() => {
+            btn.classList.remove('copied');
+            btn.querySelector('.share-label').textContent = 'Copy Link';
+        }, 2000);
+    }
 }

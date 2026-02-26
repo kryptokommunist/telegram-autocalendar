@@ -77,14 +77,26 @@
                 </div>
             </div>
 
-            {% if event.event_link %}
             <div class="event-actions">
+                {% if event.event_link %}
                 <a href="{{ event.event_link }}" target="_blank" rel="noopener noreferrer"
                    class="btn btn-primary btn-large">
                     Register / More Info →
                 </a>
+                {% endif %}
+
+                <a href="https://t.me/c/{{ (event.chat_id | string).replace('-100', '') }}/{{ event.message_id }}"
+                   target="_blank" rel="noopener noreferrer"
+                   class="btn btn-secondary">
+                    <span>✈️</span> View in Telegram
+                </a>
+
+                <div class="share-container">
+                    <button class="share-btn" onclick="shareEventDetail()">
+                        <span>↗</span> Share
+                    </button>
+                </div>
             </div>
-            {% endif %}
 
             <div class="event-description">
                 <h2>About This Event</h2>
@@ -106,4 +118,33 @@
         </div>
     </article>
 </div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    const eventData = {
+        id: {{ event.id }},
+        event_title: "{{ event.event_title | replace('"', '\\"') | replace('\n', ' ') }}",
+        event_start: "{{ event.event_start.isoformat() if event.event_start else '' }}",
+        event_location: "{{ (event.event_location or '') | replace('"', '\\"') | replace('\n', ' ') }}",
+        city: "{{ (event.city or '') | replace('"', '\\"') }}",
+        ticket_price: "{{ (event.ticket_price or '') | replace('"', '\\"') }}",
+        event_link: "{{ event.event_link or '' }}"
+    };
+
+    function shareEventDetail() {
+        if (typeof shareEvent === 'function') {
+            shareEvent(eventData);
+        } else {
+            // Fallback if app.js not loaded
+            const text = eventData.event_title;
+            const url = eventData.event_link || window.location.href;
+            if (navigator.share) {
+                navigator.share({ title: text, url: url });
+            } else {
+                window.open(`https://wa.me/?text=${encodeURIComponent(text + '\n' + url)}`);
+            }
+        }
+    }
+</script>
 {% endblock %}
