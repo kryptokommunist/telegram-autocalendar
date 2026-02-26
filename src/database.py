@@ -165,11 +165,11 @@ def get_events(
         params.append(category_id)
 
     if date_from:
-        query += " AND e.event_start >= %s"
+        query += " AND DATE(e.event_start) >= DATE(%s)"
         params.append(date_from)
 
     if date_to:
-        query += " AND e.event_start <= %s"
+        query += " AND DATE(e.event_start) <= DATE(%s)"
         params.append(date_to)
 
     if chat_id:
