@@ -10,6 +10,19 @@
             <h3>Filters</h3>
 
             <div class="filter-group">
+                <label>This Week</label>
+                <div class="weekday-buttons" id="weekday-buttons">
+                    <button class="weekday-btn" data-day="0">Mo</button>
+                    <button class="weekday-btn" data-day="1">Tu</button>
+                    <button class="weekday-btn" data-day="2">We</button>
+                    <button class="weekday-btn" data-day="3">Th</button>
+                    <button class="weekday-btn" data-day="4">Fr</button>
+                    <button class="weekday-btn" data-day="5">Sa</button>
+                    <button class="weekday-btn" data-day="6">Su</button>
+                </div>
+            </div>
+
+            <div class="filter-group">
                 <label for="date-from">From Date</label>
                 <input type="date" id="date-from" class="filter-input">
             </div>
@@ -71,7 +84,20 @@
     <section class="events-section">
         <div class="events-header">
             <h1>Upcoming Events</h1>
-            <span id="events-count" class="events-count"></span>
+            <div class="events-header-right">
+                <span id="events-count" class="events-count"></span>
+                <div class="sort-dropdown">
+                    <label for="sort-select">Sort:</label>
+                    <select id="sort-select" class="filter-input" onchange="applyFilters()">
+                        <option value="date_asc">Date (Earliest)</option>
+                        <option value="date_desc">Date (Latest)</option>
+                        <option value="title_asc">Title (A-Z)</option>
+                        <option value="title_desc">Title (Z-A)</option>
+                        <option value="price_asc">Price (Low-High)</option>
+                        <option value="price_desc">Price (High-Low)</option>
+                    </select>
+                </div>
+            </div>
         </div>
 
         <div id="events-grid" class="events-grid">
@@ -105,6 +131,7 @@
 <script>
     // Initialize page
     document.addEventListener('DOMContentLoaded', function() {
+        initWeekdayButtons();
         loadCategories();
         loadGroups();
         loadLocations();

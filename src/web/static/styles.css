@@ -238,6 +238,40 @@ body {
     border-color: var(--primary);
 }
 
+/* Weekday Buttons */
+.weekday-buttons {
+    display: flex;
+    gap: 0.25rem;
+}
+
+.weekday-btn {
+    flex: 1;
+    padding: 0.5rem 0.25rem;
+    background: var(--surface-light);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    color: var(--text-secondary);
+    font-size: 0.75rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.weekday-btn:hover {
+    background: var(--surface-lighter);
+    color: var(--text-primary);
+}
+
+.weekday-btn.active {
+    background: var(--primary);
+    border-color: var(--primary);
+    color: white;
+}
+
+.weekday-btn.today {
+    border-color: var(--primary);
+}
+
 .filter-section .btn {
     margin-top: 0.5rem;
     margin-right: 0.5rem;
@@ -295,6 +329,8 @@ body {
     justify-content: space-between;
     align-items: center;
     margin-bottom: 1.5rem;
+    flex-wrap: wrap;
+    gap: 1rem;
 }
 
 .events-header h1 {
@@ -302,9 +338,31 @@ body {
     font-weight: 600;
 }
 
+.events-header-right {
+    display: flex;
+    align-items: center;
+    gap: 1.5rem;
+}
+
 .events-count {
     color: var(--text-muted);
     font-size: 0.875rem;
+}
+
+.sort-dropdown {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.sort-dropdown label {
+    font-size: 0.875rem;
+    color: var(--text-secondary);
+}
+
+.sort-dropdown .filter-input {
+    width: auto;
+    min-width: 150px;
 }
 
 /* Events Grid */

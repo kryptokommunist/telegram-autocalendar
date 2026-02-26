@@ -4,6 +4,7 @@ let currentCategoryId = null;
 let eventsData = [];
 let allCities = [];
 let allCountries = [];
+let selectedWeekday = null;
 
 // ============ API Functions ============
 
@@ -52,9 +53,41 @@ async function loadEvents(filters = {}) {
     eventsData = events;
     updateEventsCount(events.length);
 
+    // Sort events
+    const sortOption = document.getElementById('sort-select')?.value || 'date_asc';
+    sortEvents(events, sortOption);
+
     events.forEach(event => {
         grid.appendChild(createEventCard(event));
     });
+}
+
+function sortEvents(events, sortOption) {
+    events.sort((a, b) => {
+        switch (sortOption) {
+            case 'date_asc':
+                return new Date(a.event_start || '9999') - new Date(b.event_start || '9999');
+            case 'date_desc':
+                return new Date(b.event_start || '0') - new Date(a.event_start || '0');
+            case 'title_asc':
+                return (a.event_title || '').localeCompare(b.event_title || '');
+            case 'title_desc':
+                return (b.event_title || '').localeCompare(a.event_title || '');
+            case 'price_asc':
+                return extractPrice(a.ticket_price) - extractPrice(b.ticket_price);
+            case 'price_desc':
+                return extractPrice(b.ticket_price) - extractPrice(a.ticket_price);
+            default:
+                return 0;
+        }
+    });
+}
+
+function extractPrice(priceStr) {
+    if (!priceStr) return 0;
+    if (priceStr.toLowerCase().includes('free')) return 0;
+    const match = priceStr.match(/[\d.]+/);
+    return match ? parseFloat(match[0]) : 0;
 }
 
 function createEventCard(event) {
@@ -457,10 +490,20 @@ function loadCitiesForCountry() {
 // ============ Filters ============
 
 function applyFilters() {
+    let dateFrom = document.getElementById('date-from')?.value || null;
+    let dateTo = document.getElementById('date-to')?.value || null;
+
+    // If weekday is selected, override date filters
+    if (selectedWeekday !== null) {
+        const weekdayDate = getWeekdayDate(selectedWeekday);
+        dateFrom = weekdayDate;
+        dateTo = weekdayDate;
+    }
+
     const filters = {
         category_id: currentCategoryId,
-        date_from: document.getElementById('date-from')?.value || null,
-        date_to: document.getElementById('date-to')?.value || null,
+        date_from: dateFrom,
+        date_to: dateTo,
         chat_id: currentGroupId,
         price_type: document.getElementById('price-filter')?.value || null,
         max_price: document.getElementById('max-price')?.value || null,
@@ -471,9 +514,79 @@ function applyFilters() {
     loadEvents(filters);
 }
 
+// ============ Weekday Selection ============
+
+function initWeekdayButtons() {
+    const container = document.getElementById('weekday-buttons');
+    if (!container) return;
+
+    const today = new Date();
+    const currentDayOfWeek = (today.getDay() + 6) % 7; // Convert to Mon=0, Sun=6
+
+    container.querySelectorAll('.weekday-btn').forEach(btn => {
+        const dayIndex = parseInt(btn.dataset.day);
+
+        // Mark today's button
+        if (dayIndex === currentDayOfWeek) {
+            btn.classList.add('today');
+        }
+
+        btn.onclick = () => toggleWeekday(dayIndex);
+    });
+}
+
+function toggleWeekday(dayIndex) {
+    const container = document.getElementById('weekday-buttons');
+    if (!container) return;
+
+    // Toggle selection
+    if (selectedWeekday === dayIndex) {
+        selectedWeekday = null;
+    } else {
+        selectedWeekday = dayIndex;
+    }
+
+    // Update button states
+    container.querySelectorAll('.weekday-btn').forEach(btn => {
+        const btnDay = parseInt(btn.dataset.day);
+        btn.classList.toggle('active', btnDay === selectedWeekday);
+    });
+
+    // Clear manual date inputs when weekday is selected
+    if (selectedWeekday !== null) {
+        document.getElementById('date-from').value = '';
+        document.getElementById('date-to').value = '';
+    }
+
+    applyFilters();
+}
+
+function getWeekdayDate(dayIndex) {
+    // dayIndex: 0=Monday, 6=Sunday
+    const today = new Date();
+    const currentDayOfWeek = (today.getDay() + 6) % 7; // Convert to Mon=0, Sun=6
+
+    const diff = dayIndex - currentDayOfWeek;
+    const targetDate = new Date(today);
+    targetDate.setDate(today.getDate() + diff);
+
+    return targetDate.toISOString().split('T')[0];
+}
+
+function clearWeekdaySelection() {
+    selectedWeekday = null;
+    const container = document.getElementById('weekday-buttons');
+    if (container) {
+        container.querySelectorAll('.weekday-btn').forEach(btn => {
+            btn.classList.remove('active');
+        });
+    }
+}
+
 function clearFilters() {
     currentCategoryId = null;
     currentGroupId = null;
+    selectedWeekday = null;
 
     const dateFrom = document.getElementById('date-from');
     const dateTo = document.getElementById('date-to');
@@ -482,6 +595,7 @@ function clearFilters() {
     const cityFilter = document.getElementById('city-filter');
     const countryFilter = document.getElementById('country-filter');
     const groupSearch = document.getElementById('group-search');
+    const sortSelect = document.getElementById('sort-select');
 
     if (dateFrom) dateFrom.value = '';
     if (dateTo) dateTo.value = '';
@@ -490,6 +604,10 @@ function clearFilters() {
     if (cityFilter) cityFilter.value = '';
     if (countryFilter) countryFilter.value = '';
     if (groupSearch) groupSearch.value = '';
+    if (sortSelect) sortSelect.value = 'date_asc';
+
+    // Clear weekday buttons
+    clearWeekdaySelection();
 
     // Update category active state
     document.querySelectorAll('#categories-list .category-item').forEach((item, index) => {
