@@ -4,7 +4,6 @@ let currentCategoryId = null;
 let eventsData = [];
 let allCities = [];
 let allCountries = [];
-let selectedWeekday = null;
 
 // ============ API Functions ============
 
@@ -40,6 +39,7 @@ async function loadEvents(filters = {}) {
     if (filters.city) params.append('city', filters.city);
     if (filters.country) params.append('country', filters.country);
     if (filters.max_price) params.append('max_price', filters.max_price);
+    if (filters.event_type) params.append('event_type', filters.event_type);
 
     const events = await fetchAPI(`/api/events?${params.toString()}`);
     loading.style.display = 'none';
@@ -121,6 +121,17 @@ function createEventCard(event) {
 
     const priceText = event.ticket_price || 'Free';
 
+    // Event type badge
+    const eventTypeLabels = {
+        'single': '📍 One-time',
+        'multiday': '🏕️ Multi-day',
+        'recurring': '🔄 Recurring',
+        'series': '📚 Course'
+    };
+    const eventTypeBadge = event.event_type && eventTypeLabels[event.event_type]
+        ? `<span class="event-card-type event-type-${event.event_type}">${eventTypeLabels[event.event_type]}</span>`
+        : '';
+
     // Build location string with city/country
     let locationStr = '';
     if (event.city && event.country) {
@@ -136,7 +147,10 @@ function createEventCard(event) {
     card.innerHTML = `
         ${imageHtml}
         <div class="event-card-content">
-            ${event.category_name ? `<span class="event-card-category">${escapeHtml(event.category_name)}</span>` : ''}
+            <div class="event-card-badges">
+                ${event.category_name ? `<span class="event-card-category">${escapeHtml(event.category_name)}</span>` : ''}
+                ${eventTypeBadge}
+            </div>
             <h3 class="event-card-title">${escapeHtml(event.event_title)}</h3>
             <div class="event-card-meta">
                 <div class="event-card-meta-item">
@@ -497,11 +511,22 @@ function applyFilters() {
     let dateFrom = document.getElementById('date-from')?.value || null;
     let dateTo = document.getElementById('date-to')?.value || null;
 
-    // If weekday is selected, override date filters
-    if (selectedWeekday !== null) {
-        const weekdayDate = getWeekdayDate(selectedWeekday);
-        dateFrom = weekdayDate;
-        dateTo = weekdayDate;
+    // If day button is selected, override date filters
+    if (selectedDayOffset !== null) {
+        const dayDate = getDateByOffset(selectedDayOffset);
+        dateFrom = dayDate;
+        dateTo = dayDate;
+    }
+
+    // Default: show events from today onwards (unless explicit date filter is set)
+    const hasExplicitDateFilter = document.getElementById('date-from')?.value ||
+                                   document.getElementById('date-to')?.value ||
+                                   selectedDayOffset !== null;
+
+    if (!hasExplicitDateFilter) {
+        // Default to today onwards
+        dateFrom = getDateByOffset(0); // today
+        dateTo = null; // no upper limit
     }
 
     const filters = {
@@ -513,6 +538,7 @@ function applyFilters() {
         max_price: document.getElementById('max-price')?.value || null,
         city: document.getElementById('city-filter')?.value || null,
         country: document.getElementById('country-filter')?.value || null,
+        event_type: document.getElementById('event-type-filter')?.value || null,
     };
 
     loadEvents(filters);
@@ -520,44 +546,60 @@ function applyFilters() {
 
 // ============ Weekday Selection ============
 
+// Store the selected day offset (0 = today, 1 = tomorrow, etc.)
+let selectedDayOffset = null;
+
 function initWeekdayButtons() {
     const container = document.getElementById('weekday-buttons');
     if (!container) return;
 
+    container.innerHTML = '';
+
     const today = new Date();
-    const currentDayOfWeek = (today.getDay() + 6) % 7; // Convert to Mon=0, Sun=6
+    const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
-    container.querySelectorAll('.weekday-btn').forEach(btn => {
-        const dayIndex = parseInt(btn.dataset.day);
+    // Create buttons for next 7 days starting from today
+    for (let i = 0; i < 7; i++) {
+        const date = new Date(today);
+        date.setDate(today.getDate() + i);
 
-        // Mark today's button
-        if (dayIndex === currentDayOfWeek) {
+        const dayName = dayNames[date.getDay()];
+        const dayNum = date.getDate();
+
+        const btn = document.createElement('button');
+        btn.className = 'weekday-btn';
+        btn.dataset.offset = i;
+
+        // Mark today's button with special style but still show weekday name
+        if (i === 0) {
             btn.classList.add('today');
         }
 
-        btn.onclick = () => toggleWeekday(dayIndex);
-    });
+        btn.innerHTML = `<span class="weekday-name">${dayName}</span><span class="weekday-date">${dayNum}</span>`;
+        btn.onclick = () => toggleWeekday(i);
+        container.appendChild(btn);
+    }
 }
 
-function toggleWeekday(dayIndex) {
+function toggleWeekday(dayOffset) {
     const container = document.getElementById('weekday-buttons');
     if (!container) return;
 
     // Toggle selection
-    if (selectedWeekday === dayIndex) {
-        selectedWeekday = null;
+    if (selectedDayOffset === dayOffset) {
+        selectedDayOffset = null;
     } else {
-        selectedWeekday = dayIndex;
+        selectedDayOffset = dayOffset;
     }
 
     // Update button states
     container.querySelectorAll('.weekday-btn').forEach(btn => {
-        const btnDay = parseInt(btn.dataset.day);
-        btn.classList.toggle('active', btnDay === selectedWeekday);
+        const btnOffset = parseInt(btn.dataset.offset);
+        btn.classList.toggle('active', btnOffset === selectedDayOffset);
     });
 
     // Clear manual date inputs when weekday is selected
-    if (selectedWeekday !== null) {
+    if (selectedDayOffset !== null) {
         document.getElementById('date-from').value = '';
         document.getElementById('date-to').value = '';
     }
@@ -565,20 +607,26 @@ function toggleWeekday(dayIndex) {
     applyFilters();
 }
 
-function getWeekdayDate(dayIndex) {
-    // dayIndex: 0=Monday, 6=Sunday
+function getDateByOffset(offset) {
     const today = new Date();
-    const currentDayOfWeek = (today.getDay() + 6) % 7; // Convert to Mon=0, Sun=6
-
-    const diff = dayIndex - currentDayOfWeek;
     const targetDate = new Date(today);
-    targetDate.setDate(today.getDate() + diff);
-
+    targetDate.setDate(today.getDate() + offset);
     return targetDate.toISOString().split('T')[0];
 }
 
+function onDateFilterChange() {
+    // Clear weekday selection when manual date is entered
+    clearWeekdaySelection();
+    applyFilters();
+}
+
+// Keep for backward compatibility
+function getWeekdayDate(dayIndex) {
+    return getDateByOffset(dayIndex);
+}
+
 function clearWeekdaySelection() {
-    selectedWeekday = null;
+    selectedDayOffset = null;
     const container = document.getElementById('weekday-buttons');
     if (container) {
         container.querySelectorAll('.weekday-btn').forEach(btn => {
@@ -590,7 +638,7 @@ function clearWeekdaySelection() {
 function clearFilters() {
     currentCategoryId = null;
     currentGroupId = null;
-    selectedWeekday = null;
+    selectedDayOffset = null;
 
     const dateFrom = document.getElementById('date-from');
     const dateTo = document.getElementById('date-to');
@@ -598,6 +646,7 @@ function clearFilters() {
     const maxPrice = document.getElementById('max-price');
     const cityFilter = document.getElementById('city-filter');
     const countryFilter = document.getElementById('country-filter');
+    const eventTypeFilter = document.getElementById('event-type-filter');
     const groupSearch = document.getElementById('group-search');
     const sortSelect = document.getElementById('sort-select');
 
@@ -607,6 +656,7 @@ function clearFilters() {
     if (maxPrice) maxPrice.value = '';
     if (cityFilter) cityFilter.value = '';
     if (countryFilter) countryFilter.value = '';
+    if (eventTypeFilter) eventTypeFilter.value = '';
     if (groupSearch) groupSearch.value = '';
     if (sortSelect) sortSelect.value = 'date_asc';
 

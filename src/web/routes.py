@@ -44,6 +44,7 @@ def register_routes(app: Flask):
         max_price = request.args.get("max_price", type=float)
         city = request.args.get("city")
         country = request.args.get("country")
+        event_type = request.args.get("event_type")
         limit = request.args.get("limit", 100, type=int)
         offset = request.args.get("offset", 0, type=int)
 
@@ -70,6 +71,7 @@ def register_routes(app: Flask):
             max_price=max_price,
             city=city,
             country=country,
+            event_type=event_type,
             limit=limit,
             offset=offset,
         )

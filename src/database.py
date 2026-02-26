@@ -87,6 +87,7 @@ def save_event(
     event_link: Optional[str],
     ticket_price: Optional[str],
     organizer: Optional[str],
+    event_type: Optional[str],
     category_id: Optional[int],
     image_path: Optional[str],
     original_message: str,
@@ -96,9 +97,9 @@ def save_event(
         INSERT INTO events (
             message_id, chat_id, chat_name, event_title, event_start, event_end,
             event_location, city, country, event_description, event_description_full,
-            event_link, ticket_price, organizer, category_id, image_path, original_message
+            event_link, ticket_price, organizer, event_type, category_id, image_path, original_message
         ) VALUES (
-            %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s
+            %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s
         )
         ON DUPLICATE KEY UPDATE
             event_title = VALUES(event_title),
@@ -112,6 +113,7 @@ def save_event(
             event_link = VALUES(event_link),
             ticket_price = VALUES(ticket_price),
             organizer = VALUES(organizer),
+            event_type = VALUES(event_type),
             category_id = VALUES(category_id),
             image_path = VALUES(image_path)
     """
@@ -132,6 +134,7 @@ def save_event(
             event_link,
             ticket_price,
             organizer,
+            event_type,
             category_id,
             image_path,
             original_message,
@@ -148,6 +151,7 @@ def get_events(
     max_price: Optional[float] = None,
     city: Optional[str] = None,
     country: Optional[str] = None,
+    event_type: Optional[str] = None,
     limit: int = 100,
     offset: int = 0,
 ) -> list[dict]:
@@ -198,6 +202,10 @@ def get_events(
     if country:
         query += " AND LOWER(e.country) = LOWER(%s)"
         params.append(country)
+
+    if event_type:
+        query += " AND e.event_type = %s"
+        params.append(event_type)
 
     query += " ORDER BY e.event_start ASC LIMIT %s OFFSET %s"
     params.extend([limit, offset])

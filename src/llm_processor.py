@@ -43,6 +43,12 @@ SOURCE CONTEXT:
 EXISTING CATEGORIES (prefer these, but create new if none fit):
 {categories}
 
+EVENT TYPE definitions:
+- "single": One-time event on a single day (class, workshop, party, meetup)
+- "multiday": Continuous event spanning multiple days (retreat, festival, conference)
+- "recurring": Repeats on an ongoing basis (every Thursday yoga, weekly meditation)
+- "series": Limited course/program over a set period (4-week course, 3-month training)
+
 Return JSON only, no other text:
 - If NOT an event: {{"is_event": false}}
 - If IS an event:
@@ -58,6 +64,7 @@ Return JSON only, no other text:
   "ticket_price": "Price info (e.g., 'Free', '$25', '10-50 EUR') or null",
   "organizer": "Event organizer/host name or null",
   "category": "Best matching category name (existing or new)",
+  "event_type": "single, multiday, recurring, or series",
   "event_description": "1-2 sentence summary"
 }}
 
@@ -204,6 +211,11 @@ async def process_message_for_event(
     event_start = parse_datetime(event_data.get("event_start"))
     event_end = parse_datetime(event_data.get("event_end"))
 
+    # Validate event_type
+    event_type = event_data.get("event_type")
+    if event_type not in ("single", "multiday", "recurring", "series"):
+        event_type = None
+
     # Save event
     event_id = db.save_event(
         message_id=message_id,
@@ -220,6 +232,7 @@ async def process_message_for_event(
         event_link=event_data.get("event_link"),
         ticket_price=event_data.get("ticket_price"),
         organizer=event_data.get("organizer"),
+        event_type=event_type,
         category_id=category_id,
         image_path=image_path,
         original_message=message_text,

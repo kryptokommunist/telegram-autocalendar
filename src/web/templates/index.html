@@ -10,31 +10,25 @@
             <h3>Filters</h3>
 
             <div class="filter-group">
-                <label>This Week</label>
+                <label>Next 7 Days</label>
                 <div class="weekday-buttons" id="weekday-buttons">
-                    <button class="weekday-btn" data-day="0">Mo</button>
-                    <button class="weekday-btn" data-day="1">Tu</button>
-                    <button class="weekday-btn" data-day="2">We</button>
-                    <button class="weekday-btn" data-day="3">Th</button>
-                    <button class="weekday-btn" data-day="4">Fr</button>
-                    <button class="weekday-btn" data-day="5">Sa</button>
-                    <button class="weekday-btn" data-day="6">Su</button>
+                    <!-- Populated dynamically by JS -->
                 </div>
             </div>
 
             <div class="filter-group">
                 <label for="date-from">From Date</label>
-                <input type="date" id="date-from" class="filter-input">
+                <input type="date" id="date-from" class="filter-input" onchange="onDateFilterChange()">
             </div>
 
             <div class="filter-group">
                 <label for="date-to">To Date</label>
-                <input type="date" id="date-to" class="filter-input">
+                <input type="date" id="date-to" class="filter-input" onchange="onDateFilterChange()">
             </div>
 
             <div class="filter-group">
                 <label for="price-filter">Price Type</label>
-                <select id="price-filter" class="filter-input">
+                <select id="price-filter" class="filter-input" onchange="applyFilters()">
                     <option value="">All</option>
                     <option value="free">Free</option>
                     <option value="paid">Paid</option>
@@ -43,25 +37,35 @@
 
             <div class="filter-group">
                 <label for="max-price">Max Price</label>
-                <input type="number" id="max-price" class="filter-input" placeholder="e.g., 40" min="0">
+                <input type="number" id="max-price" class="filter-input" placeholder="e.g., 40" min="0" onchange="applyFilters()">
+            </div>
+
+            <div class="filter-group">
+                <label for="event-type-filter">Event Type</label>
+                <select id="event-type-filter" class="filter-input" onchange="applyFilters()">
+                    <option value="">All Types</option>
+                    <option value="single">One-time Event</option>
+                    <option value="multiday">Multi-day (Retreat/Festival)</option>
+                    <option value="recurring">Recurring (Weekly/Monthly)</option>
+                    <option value="series">Course/Series</option>
+                </select>
             </div>
 
             <div class="filter-group">
                 <label for="country-filter">Country</label>
-                <select id="country-filter" class="filter-input" onchange="loadCitiesForCountry()">
+                <select id="country-filter" class="filter-input" onchange="loadCitiesForCountry(); applyFilters()">
                     <option value="">All Countries</option>
                 </select>
             </div>
 
             <div class="filter-group">
                 <label for="city-filter">City</label>
-                <select id="city-filter" class="filter-input">
+                <select id="city-filter" class="filter-input" onchange="applyFilters()">
                     <option value="">All Cities</option>
                 </select>
             </div>
 
-            <button class="btn btn-secondary" onclick="applyFilters()">Apply Filters</button>
-            <button class="btn btn-outline" onclick="clearFilters()">Clear</button>
+            <button class="btn btn-outline" onclick="clearFilters()">Clear Filters</button>
         </div>
 
         <div class="categories-section">

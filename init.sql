@@ -22,6 +22,7 @@ INSERT INTO categories (name, description) VALUES
     ('Conference', 'Large conferences, summits, industry events');
 
 -- Events table (enhanced)
+-- event_type: single (one day), multiday (retreat/festival), recurring (every Thursday), series (course over 4 months)
 CREATE TABLE events (
     id INT AUTO_INCREMENT PRIMARY KEY,
     message_id BIGINT NOT NULL,
@@ -38,6 +39,7 @@ CREATE TABLE events (
     event_link VARCHAR(1000),
     ticket_price VARCHAR(100),
     organizer VARCHAR(255),
+    event_type ENUM('single', 'multiday', 'recurring', 'series') DEFAULT NULL,
     category_id INT,
     image_path VARCHAR(500),
     original_message TEXT,
@@ -51,6 +53,7 @@ CREATE INDEX idx_events_category ON events(category_id);
 CREATE INDEX idx_events_start ON events(event_start);
 CREATE INDEX idx_events_city ON events(city);
 CREATE INDEX idx_events_country ON events(country);
+CREATE INDEX idx_events_type ON events(event_type);
 
 -- Processed messages tracking (avoid reprocessing)
 CREATE TABLE processed_messages (
