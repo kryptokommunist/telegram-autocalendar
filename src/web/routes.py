@@ -104,12 +104,8 @@ def register_routes(app: Flask):
 
     @app.route("/api/groups")
     def api_groups():
-        """Get all Telegram groups."""
-        groups = db.get_all_telegram_groups()
-        # Serialize datetime objects
-        for group in groups:
-            if group.get("updated_at"):
-                group["updated_at"] = group["updated_at"].isoformat()
+        """Get groups that have events (for filtering)."""
+        groups = db.get_groups_with_events()
         return jsonify(groups)
 
     @app.route("/api/locations")

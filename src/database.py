@@ -311,6 +311,20 @@ def get_all_telegram_groups() -> list[dict]:
     return execute_query(query, fetch=True)
 
 
+def get_groups_with_events() -> list[dict]:
+    """Get only groups that have events and are enabled for scanning."""
+    query = """
+        SELECT DISTINCT tg.chat_id, tg.chat_name, tg.chat_type, COUNT(e.id) as event_count
+        FROM telegram_groups tg
+        INNER JOIN events e ON tg.chat_id = e.chat_id
+        INNER JOIN selected_groups sg ON tg.chat_id = sg.chat_id AND sg.enabled = TRUE
+        GROUP BY tg.chat_id, tg.chat_name, tg.chat_type
+        HAVING COUNT(e.id) > 0
+        ORDER BY tg.chat_name
+    """
+    return execute_query(query, fetch=True)
+
+
 # ============ Auth State ============
 
 def get_auth_state() -> Optional[dict]:

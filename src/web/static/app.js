@@ -375,13 +375,16 @@ function renderGroupsList(groups) {
 
     container.innerHTML = '';
 
+    // Calculate total events
+    const totalEvents = groups.reduce((sum, g) => sum + (g.event_count || 0), 0);
+
     // Add "All Groups" option
     const allItem = document.createElement('div');
     allItem.className = `category-item ${currentGroupId === null ? 'active' : ''}`;
     allItem.onclick = () => selectGroup(null);
     allItem.innerHTML = `
         <span class="category-name">All Groups</span>
-        <span class="category-count">${groups.length}</span>
+        <span class="category-count">${totalEvents}</span>
     `;
     container.appendChild(allItem);
 
@@ -400,6 +403,7 @@ function renderGroupsList(groups) {
 
         item.innerHTML = `
             <span class="category-name">${typeIcon} ${escapeHtml(group.chat_name || 'Unknown')}</span>
+            <span class="category-count">${group.event_count || 0}</span>
         `;
         container.appendChild(item);
     });
