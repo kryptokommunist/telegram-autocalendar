@@ -4,6 +4,7 @@ let currentCategoryId = null;
 let eventsData = [];
 let allCities = [];
 let allCountries = [];
+let totalEventsCount = 0;
 
 // ============ API Functions ============
 
@@ -41,17 +42,21 @@ async function loadEvents(filters = {}) {
     if (filters.max_price) params.append('max_price', filters.max_price);
     if (filters.event_type) params.append('event_type', filters.event_type);
 
-    const events = await fetchAPI(`/api/events?${params.toString()}`);
+    const response = await fetchAPI(`/api/events?${params.toString()}`);
     loading.style.display = 'none';
+
+    // Handle both old array format and new object format for backward compatibility
+    const events = Array.isArray(response) ? response : (response?.events || []);
+    totalEventsCount = Array.isArray(response) ? events.length : (response?.total_count || events.length);
 
     if (!events || events.length === 0) {
         noEvents.style.display = 'block';
-        updateEventsCount(0);
+        updateEventsCount(0, 0);
         return;
     }
 
     eventsData = events;
-    updateEventsCount(events.length);
+    updateEventsCount(events.length, totalEventsCount);
 
     // Sort events
     const sortOption = document.getElementById('sort-select')?.value || 'date_asc';
@@ -294,10 +299,15 @@ document.addEventListener('keydown', (e) => {
     if (e.key === 'Escape') closeModal();
 });
 
-function updateEventsCount(count) {
+function updateEventsCount(displayedCount, totalCount = null) {
     const countEl = document.getElementById('events-count');
     if (countEl) {
-        countEl.textContent = `${count} event${count !== 1 ? 's' : ''}`;
+        if (totalCount !== null && totalCount > displayedCount) {
+            countEl.textContent = `${displayedCount} of ${totalCount} event${totalCount !== 1 ? 's' : ''}`;
+        } else {
+            const count = totalCount || displayedCount;
+            countEl.textContent = `${count} event${count !== 1 ? 's' : ''}`;
+        }
     }
 }
 
@@ -664,14 +674,15 @@ function clearFilters() {
 
 // ============ Sync ============
 
-async function triggerSync() {
+async function triggerSync(force = false) {
     const btn = document.getElementById('sync-btn');
     if (!btn) return;
 
     btn.disabled = true;
     btn.querySelector('.sync-text').textContent = 'Syncing...';
 
-    const result = await fetchAPI('/api/sync', { method: 'POST' });
+    const url = force ? '/api/sync?force=true' : '/api/sync';
+    const result = await fetchAPI(url, { method: 'POST' });
 
     if (result?.error) {
         alert(result.error);
@@ -696,9 +707,24 @@ async function updateSyncStatus() {
         btn.disabled = true;
         btn.querySelector('.sync-text').textContent = 'Syncing...';
         statusEl.textContent = `${status.groups_scanned}/${status.groups_total} groups, ${status.events_found} events`;
+        statusEl.classList.remove('stale');
+    } else if (status.status === 'stale') {
+        // Sync appears stuck - allow user to restart
+        btn.disabled = false;
+        btn.querySelector('.sync-text').textContent = 'Restart Sync';
+        btn.onclick = () => triggerSync(true);
+        statusEl.innerHTML = `<span class="stale-warning">⚠️ ${status.stale_reason || 'Sync appears stuck'}</span>`;
+        statusEl.classList.add('stale');
+    } else if (status.status === 'error') {
+        btn.disabled = false;
+        btn.querySelector('.sync-text').textContent = 'Retry Sync';
+        statusEl.innerHTML = `<span class="error-warning">❌ ${status.error_message || 'Sync failed'}</span>`;
+        statusEl.classList.remove('stale');
     } else {
         btn.disabled = false;
         btn.querySelector('.sync-text').textContent = 'Sync Now';
+        btn.onclick = () => triggerSync(false);
+        statusEl.classList.remove('stale');
 
         if (status.completed_at) {
             const lastSync = new Date(status.completed_at);
@@ -715,9 +741,13 @@ function pollSyncStatus() {
 
         updateSyncStatus();
 
+        // Stop polling when sync is no longer running (completed, error, or stale)
         if (status?.status !== 'running') {
             clearInterval(interval);
-            loadEvents(); // Reload events after sync completes
+            // Reload events if sync completed or errored (not if stale - user needs to restart)
+            if (status?.status === 'completed' || status?.status === 'error') {
+                loadEvents();
+            }
         }
     }, 2000);
 }

@@ -379,6 +379,70 @@ def get_upcoming_events(days: int = 30) -> list[dict]:
     return execute_query(query, (days,), fetch=True)
 
 
+def get_events_count(
+    category_id: Optional[int] = None,
+    date_from: Optional[datetime] = None,
+    date_to: Optional[datetime] = None,
+    chat_id: Optional[int] = None,
+    price_type: Optional[str] = None,
+    max_price: Optional[float] = None,
+    city: Optional[str] = None,
+    country: Optional[str] = None,
+    event_type: Optional[str] = None,
+) -> int:
+    """Get total count of events with optional filters (same filters as get_events)."""
+    query = """
+        SELECT COUNT(*) as total
+        FROM events e
+        WHERE 1=1
+    """
+    params = []
+
+    if category_id:
+        query += " AND e.category_id = %s"
+        params.append(category_id)
+
+    if date_from:
+        query += " AND DATE(e.event_start) >= DATE(%s)"
+        params.append(date_from)
+
+    if date_to:
+        query += " AND DATE(e.event_start) <= DATE(%s)"
+        params.append(date_to)
+
+    if chat_id:
+        query += " AND e.chat_id = %s"
+        params.append(chat_id)
+
+    if price_type == "free":
+        query += " AND (e.ticket_price IS NULL OR LOWER(e.ticket_price) LIKE '%free%')"
+    elif price_type == "paid":
+        query += " AND e.ticket_price IS NOT NULL AND LOWER(e.ticket_price) NOT LIKE '%free%'"
+
+    if max_price is not None:
+        query += """ AND (
+            e.ticket_price IS NULL
+            OR LOWER(e.ticket_price) LIKE '%free%'
+            OR CAST(REGEXP_SUBSTR(e.ticket_price, '[0-9]+\\.?[0-9]*') AS DECIMAL(10,2)) <= %s
+        )"""
+        params.append(max_price)
+
+    if city:
+        query += " AND LOWER(e.city) = LOWER(%s)"
+        params.append(city)
+
+    if country:
+        query += " AND LOWER(e.country) = LOWER(%s)"
+        params.append(country)
+
+    if event_type:
+        query += " AND e.event_type = %s"
+        params.append(event_type)
+
+    result = execute_query(query, tuple(params), fetch=True)
+    return result[0]["total"] if result else 0
+
+
 # ============ Processed Messages ============
 
 def is_message_processed(message_id: int, chat_id: int) -> bool:
@@ -489,10 +553,25 @@ def clear_auth_state():
 # ============ Sync Status ============
 
 def get_sync_status() -> dict:
-    """Get the current sync status."""
+    """Get the current sync status, detecting stale/stuck syncs."""
     query = "SELECT * FROM sync_status ORDER BY id DESC LIMIT 1"
     results = execute_query(query, fetch=True)
-    return results[0] if results else {"status": "idle"}
+    if not results:
+        return {"status": "idle"}
+
+    status = results[0]
+
+    # Detect stale sync: if status is "running" but updated_at is more than 5 minutes ago,
+    # the sync is likely stuck (machine paused, network lost, process died)
+    if status.get("status") == "running" and status.get("updated_at"):
+        from datetime import timedelta
+        updated_at = status["updated_at"]
+        now = datetime.now()
+        if now - updated_at > timedelta(minutes=5):
+            status["status"] = "stale"
+            status["stale_reason"] = "Sync appears stuck - no progress for 5+ minutes"
+
+    return status
 
 
 def update_sync_status(

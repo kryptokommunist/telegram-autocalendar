@@ -76,13 +76,31 @@ def register_routes(app: Flask):
             offset=offset,
         )
 
+        # Get total count with same filters (for pagination info)
+        total_count = db.get_events_count(
+            category_id=category_id,
+            date_from=date_from_dt,
+            date_to=date_to_dt,
+            chat_id=chat_id,
+            price_type=price_type,
+            max_price=max_price,
+            city=city,
+            country=country,
+            event_type=event_type,
+        )
+
         # Serialize datetime objects
         for event in events:
             for key in ["event_start", "event_end", "created_at"]:
                 if event.get(key):
                     event[key] = event[key].isoformat()
 
-        return jsonify(events)
+        return jsonify({
+            "events": events,
+            "total_count": total_count,
+            "limit": limit,
+            "offset": offset,
+        })
 
     @app.route("/api/events/<int:event_id>")
     def api_event_detail(event_id: int):
@@ -226,8 +244,15 @@ def register_routes(app: Flask):
     def api_sync():
         """Trigger manual sync."""
         sync_status = db.get_sync_status()
-        if sync_status.get("status") == "running":
+        force = request.args.get("force", "false").lower() == "true"
+
+        # Allow restart if sync is stale (stuck)
+        if sync_status.get("status") == "running" and not force:
             return jsonify({"error": "Sync already running"}), 400
+
+        # If forcing restart of a stale sync, reset status first
+        if sync_status.get("status") in ("running", "stale") and force:
+            db.reset_sync_status()
 
         # Import here to avoid circular imports
         from ..scheduler import run_sync_in_thread
