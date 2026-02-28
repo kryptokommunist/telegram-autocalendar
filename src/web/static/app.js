@@ -250,8 +250,8 @@ function showEventModal(event) {
         </div>
 
         ${event.event_description ? `
-        <div style="padding:0 1.5rem; margin-bottom:1.5rem;">
-            <p style="color:var(--text-secondary);line-height:1.6;">${escapeHtml(event.event_description)}</p>
+        <div style="padding:1rem 1.5rem;">
+            <p style="color:var(--text-secondary);line-height:1.6;margin:0;">${escapeHtml(event.event_description)}</p>
         </div>
         ` : ''}
 
