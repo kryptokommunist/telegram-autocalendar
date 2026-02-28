@@ -267,9 +267,11 @@ function showEventModal(event) {
             </a>
             ` : ''}
             ${event.event_start ? `
-            <button class="btn btn-secondary" onclick="downloadICalEvent(window._currentModalEvent)">
-                <span>📅</span> Add to Calendar
-            </button>
+            <div class="calendar-container">
+                <button class="btn btn-secondary" onclick="showCalendarDropdown(window._currentModalEvent, this)">
+                    <span>📅</span> Add to Calendar
+                </button>
+            </div>
             ` : ''}
             <a href="/event/${event.id}" class="btn btn-secondary">View Full Details</a>
             <a href="https://t.me/c/${String(event.chat_id).replace('-100', '')}/${event.message_id}"
@@ -1036,6 +1038,134 @@ function formatICalDate(dateStr) {
     return date.toISOString().replace(/[-:]/g, '').replace(/\.\d{3}/, '');
 }
 
+function getEventLocation(event) {
+    let location = '';
+    if (event.event_location) location = event.event_location;
+    if (event.city) location += (location ? ', ' : '') + event.city;
+    if (event.country) location += (location ? ', ' : '') + event.country;
+    return location;
+}
+
+function formatGoogleCalDate(dateStr) {
+    if (!dateStr) return '';
+    // Format: YYYYMMDDTHHMMSSZ
+    return new Date(dateStr).toISOString().replace(/[-:]/g, '').replace(/\.\d{3}/, '');
+}
+
+function getGoogleCalendarUrl(event) {
+    const start = formatGoogleCalDate(event.event_start);
+    const end = event.event_end
+        ? formatGoogleCalDate(event.event_end)
+        : formatGoogleCalDate(new Date(new Date(event.event_start).getTime() + 2 * 60 * 60 * 1000).toISOString());
+
+    const params = new URLSearchParams({
+        action: 'TEMPLATE',
+        text: event.event_title,
+        dates: `${start}/${end}`,
+        details: event.event_description || '',
+        location: getEventLocation(event),
+    });
+
+    if (event.event_link) {
+        params.set('details', `${event.event_description || ''}\n\nMore info: ${event.event_link}`);
+    }
+
+    return `https://calendar.google.com/calendar/render?${params.toString()}`;
+}
+
+function getOutlookCalendarUrl(event) {
+    const start = new Date(event.event_start).toISOString();
+    const end = event.event_end
+        ? new Date(event.event_end).toISOString()
+        : new Date(new Date(event.event_start).getTime() + 2 * 60 * 60 * 1000).toISOString();
+
+    const params = new URLSearchParams({
+        path: '/calendar/action/compose',
+        rru: 'addevent',
+        subject: event.event_title,
+        startdt: start,
+        enddt: end,
+        body: event.event_description || '',
+        location: getEventLocation(event),
+    });
+
+    return `https://outlook.live.com/calendar/0/deeplink/compose?${params.toString()}`;
+}
+
+function getYahooCalendarUrl(event) {
+    const start = formatGoogleCalDate(event.event_start);
+    const end = event.event_end
+        ? formatGoogleCalDate(event.event_end)
+        : formatGoogleCalDate(new Date(new Date(event.event_start).getTime() + 2 * 60 * 60 * 1000).toISOString());
+
+    const params = new URLSearchParams({
+        v: '60',
+        title: event.event_title,
+        st: start,
+        et: end,
+        desc: event.event_description || '',
+        in_loc: getEventLocation(event),
+    });
+
+    return `https://calendar.yahoo.com/?${params.toString()}`;
+}
+
+function showCalendarDropdown(event, targetBtn) {
+    // Remove any existing dropdowns
+    document.querySelectorAll('.calendar-dropdown').forEach(d => d.remove());
+
+    const googleUrl = getGoogleCalendarUrl(event);
+    const outlookUrl = getOutlookCalendarUrl(event);
+    const yahooUrl = getYahooCalendarUrl(event);
+
+    const dropdown = document.createElement('div');
+    dropdown.className = 'share-dropdown calendar-dropdown';
+    dropdown.innerHTML = `
+        <div class="share-dropdown-title">Add to Calendar</div>
+        <div class="share-grid">
+            <a href="${googleUrl}" target="_blank" rel="noopener" class="share-option" onclick="event.stopPropagation()">
+                <span class="share-icon">📅</span>
+                <span class="share-label">Google</span>
+            </a>
+            <a href="${outlookUrl}" target="_blank" rel="noopener" class="share-option" onclick="event.stopPropagation()">
+                <span class="share-icon">📧</span>
+                <span class="share-label">Outlook</span>
+            </a>
+            <a href="${yahooUrl}" target="_blank" rel="noopener" class="share-option" onclick="event.stopPropagation()">
+                <span class="share-icon">📆</span>
+                <span class="share-label">Yahoo</span>
+            </a>
+            <button class="share-option" onclick="downloadICalEvent(window._currentModalEvent); event.stopPropagation()">
+                <span class="share-icon">💾</span>
+                <span class="share-label">Download .ics</span>
+            </button>
+        </div>
+    `;
+
+    // Position dropdown
+    const container = targetBtn.closest('.calendar-container') || targetBtn.parentElement;
+    container.style.position = 'relative';
+    container.appendChild(dropdown);
+
+    // Animate in
+    requestAnimationFrame(() => {
+        dropdown.classList.add('active');
+    });
+
+    // Close on outside click
+    const closeDropdown = (e) => {
+        if (!dropdown.contains(e.target)) {
+            dropdown.classList.remove('active');
+            setTimeout(() => dropdown.remove(), 250);
+            document.removeEventListener('click', closeDropdown);
+        }
+    };
+
+    setTimeout(() => {
+        document.addEventListener('click', closeDropdown);
+    }, 100);
+}
+
 function downloadICalEvent(event) {
     if (!event || !event.event_start) return;
 
@@ -1044,11 +1174,7 @@ function downloadICalEvent(event) {
         new Date(new Date(event.event_start).getTime() + 2 * 60 * 60 * 1000).toISOString() // Default 2 hour duration
     );
 
-    // Build location string
-    let location = '';
-    if (event.event_location) location = event.event_location;
-    if (event.city) location += (location ? ', ' : '') + event.city;
-    if (event.country) location += (location ? ', ' : '') + event.country;
+    const location = getEventLocation(event);
 
     // Escape special characters for iCal
     const escapeIcal = (str) => {
