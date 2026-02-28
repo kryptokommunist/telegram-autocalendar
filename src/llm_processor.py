@@ -28,19 +28,21 @@ def build_extraction_prompt(
 ) -> str:
     """Build the prompt for event extraction."""
     categories = get_existing_categories()
-    # Use message date as reference for relative dates, fall back to now if unknown
-    reference_date = message_date if message_date else datetime.now()
-    reference_date_str = reference_date.strftime("%Y-%m-%d")
-    message_date_str = message_date.strftime("%Y-%m-%d %H:%M") if message_date else "Unknown"
+    current_date = datetime.now().strftime("%Y-%m-%d")
+    message_date_str = message_date.strftime("%Y-%m-%d %H:%M") if message_date else current_date
+    message_date_only = message_date.strftime("%Y-%m-%d") if message_date else current_date
 
     return f"""You are an event extraction assistant. Analyze the following Telegram message
 and determine if it announces an event (meetup, party, conference, workshop, etc.).
+
+IMPORTANT DATES:
+- Today's date (when scanning): {current_date}
+- Message was posted on: {message_date_str}
 
 SOURCE CONTEXT:
 - Group/Channel name: {chat_name}
 - Group/Channel description: {chat_description or 'Not available'}
 - Type: {chat_type}
-- Message posted on: {message_date_str}
 
 EXISTING CATEGORIES (prefer these, but create new if none fit):
 {categories}
@@ -70,8 +72,10 @@ Return JSON only, no other text:
   "event_description": "1-2 sentence summary"
 }}
 
-CRITICAL: Interpret ALL relative dates (e.g., "this Friday", "next week", "tomorrow") relative to the MESSAGE DATE ({reference_date_str}), NOT today's date.
-For example, if the message was posted on 2026-01-15 and says "this Saturday", the event is on 2026-01-17.
+CRITICAL FOR DATE INTERPRETATION:
+- Interpret ALL relative dates (e.g., "this Friday", "next week", "tomorrow") relative to the MESSAGE DATE ({message_date_only}), NOT today's date.
+- Example: If message was posted on 2026-01-15 and says "this Saturday", the event is on 2026-01-18 (the Saturday after Jan 15).
+- Today's date ({current_date}) is provided so you know if the event is in the past or future.
 
 Message:
 {message_text}"""
