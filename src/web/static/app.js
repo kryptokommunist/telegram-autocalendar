@@ -1140,10 +1140,10 @@ function showCalendarDropdown(event, targetBtn) {
                 <span class="share-icon">📅</span>
                 <span class="share-label">Google</span>
             </a>
-            <button class="share-option" onclick="openAppleCalendar(window._currentModalEvent); event.stopPropagation()">
+            <a href="${getAppleCalendarUrl(event)}" class="share-option" onclick="event.stopPropagation()">
                 <span class="share-icon">🍎</span>
                 <span class="share-label">Apple</span>
-            </button>
+            </a>
             <a href="${outlookUrl}" target="_blank" rel="noopener" class="share-option" onclick="event.stopPropagation()">
                 <span class="share-icon">📧</span>
                 <span class="share-label">Outlook</span>
@@ -1179,11 +1179,12 @@ function showCalendarDropdown(event, targetBtn) {
     }, 100);
 }
 
-function openAppleCalendar(event) {
-    if (!event || !event.id) return;
+function getAppleCalendarUrl(event) {
+    if (!event || !event.id) return '#';
 
-    // Use .ics extension in URL - browsers recognize this and open Calendar app
-    window.location.href = `${window.location.origin}/api/events/${event.id}/event.ics`;
+    // Use webcal:// protocol with .ics extension
+    const httpUrl = `${window.location.origin}/api/events/${event.id}/event.ics`;
+    return httpUrl.replace(/^https?:/, 'webcal:');
 }
 
 function generateICalContent(event) {
