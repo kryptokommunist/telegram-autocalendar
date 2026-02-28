@@ -1140,6 +1140,10 @@ function showCalendarDropdown(event, targetBtn) {
                 <span class="share-icon">📅</span>
                 <span class="share-label">Google</span>
             </a>
+            <button class="share-option" onclick="downloadICalEvent(window._currentModalEvent); event.stopPropagation()">
+                <span class="share-icon">🍎</span>
+                <span class="share-label">Apple</span>
+            </button>
             <a href="${outlookUrl}" target="_blank" rel="noopener" class="share-option" onclick="event.stopPropagation()">
                 <span class="share-icon">📧</span>
                 <span class="share-label">Outlook</span>
@@ -1148,10 +1152,6 @@ function showCalendarDropdown(event, targetBtn) {
                 <span class="share-icon">📆</span>
                 <span class="share-label">Yahoo</span>
             </a>
-            <button class="share-option" onclick="downloadICalEvent(window._currentModalEvent); event.stopPropagation()">
-                <span class="share-icon">💾</span>
-                <span class="share-label">Download .ics</span>
-            </button>
         </div>
     `;
 
