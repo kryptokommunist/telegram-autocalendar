@@ -1140,7 +1140,7 @@ function showCalendarDropdown(event, targetBtn) {
                 <span class="share-icon">📅</span>
                 <span class="share-label">Google</span>
             </a>
-            <button class="share-option" onclick="downloadICalEvent(window._currentModalEvent); event.stopPropagation()">
+            <button class="share-option" onclick="openAppleCalendar(window._currentModalEvent); event.stopPropagation()">
                 <span class="share-icon">🍎</span>
                 <span class="share-label">Apple</span>
             </button>
@@ -1179,17 +1179,24 @@ function showCalendarDropdown(event, targetBtn) {
     }, 100);
 }
 
-function downloadICalEvent(event) {
+function openAppleCalendar(event) {
     if (!event || !event.event_start) return;
 
+    const icalContent = generateICalContent(event);
+
+    // Create a data URI and open it - this triggers Calendar app on iOS/macOS
+    const dataUri = 'data:text/calendar;charset=utf-8,' + encodeURIComponent(icalContent);
+    window.open(dataUri, '_blank');
+}
+
+function generateICalContent(event) {
     const startDate = formatICalDate(event.event_start);
     const endDate = event.event_end ? formatICalDate(event.event_end) : formatICalDate(
-        new Date(new Date(event.event_start).getTime() + 2 * 60 * 60 * 1000).toISOString() // Default 2 hour duration
+        new Date(new Date(event.event_start).getTime() + 2 * 60 * 60 * 1000).toISOString()
     );
 
     const location = getEventLocation(event);
 
-    // Escape special characters for iCal
     const escapeIcal = (str) => {
         if (!str) return '';
         return str
@@ -1202,7 +1209,7 @@ function downloadICalEvent(event) {
     const uid = `event-${event.id}@telegram-autocalendar`;
     const now = formatICalDate(new Date().toISOString());
 
-    const icalContent = [
+    return [
         'BEGIN:VCALENDAR',
         'VERSION:2.0',
         'PRODID:-//Telegram Auto-Calendar//EN',
@@ -1220,6 +1227,12 @@ function downloadICalEvent(event) {
         'END:VEVENT',
         'END:VCALENDAR'
     ].filter(line => line).join('\r\n');
+}
+
+function downloadICalEvent(event) {
+    if (!event || !event.event_start) return;
+
+    const icalContent = generateICalContent(event);
 
     // Create and download file
     const blob = new Blob([icalContent], { type: 'text/calendar;charset=utf-8' });
