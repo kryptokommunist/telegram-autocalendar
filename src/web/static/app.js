@@ -228,7 +228,12 @@ function showEventModal(event) {
             ${locationStr ? `
             <div class="modal-meta-item">
                 <span class="modal-meta-icon">📍</span>
-                <span>${escapeHtml(locationStr)}</span>
+                <a href="https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(locationStr)}"
+                   target="_blank" rel="noopener"
+                   style="color:var(--primary-light);text-decoration:none;"
+                   title="Open in Google Maps">
+                    ${escapeHtml(locationStr)} ↗
+                </a>
             </div>
             ` : ''}
             ${event.ticket_price ? `
@@ -260,6 +265,11 @@ function showEventModal(event) {
             <a href="${escapeHtml(event.event_link)}" target="_blank" rel="noopener" class="btn btn-primary">
                 Register / More Info →
             </a>
+            ` : ''}
+            ${event.event_start ? `
+            <button class="btn btn-secondary" onclick="downloadICalEvent(window._currentModalEvent)">
+                <span>📅</span> Add to Calendar
+            </button>
             ` : ''}
             <a href="/event/${event.id}" class="btn btn-secondary">View Full Details</a>
             <a href="https://t.me/c/${String(event.chat_id).replace('-100', '')}/${event.message_id}"
@@ -1015,4 +1025,71 @@ async function copyShareLink(url, text, btn) {
             btn.querySelector('.share-label').textContent = 'Copy Link';
         }, 2000);
     }
+}
+
+// ============ Calendar Export ============
+
+function formatICalDate(dateStr) {
+    if (!dateStr) return null;
+    const date = new Date(dateStr);
+    // Format: YYYYMMDDTHHMMSSZ
+    return date.toISOString().replace(/[-:]/g, '').replace(/\.\d{3}/, '');
+}
+
+function downloadICalEvent(event) {
+    if (!event || !event.event_start) return;
+
+    const startDate = formatICalDate(event.event_start);
+    const endDate = event.event_end ? formatICalDate(event.event_end) : formatICalDate(
+        new Date(new Date(event.event_start).getTime() + 2 * 60 * 60 * 1000).toISOString() // Default 2 hour duration
+    );
+
+    // Build location string
+    let location = '';
+    if (event.event_location) location = event.event_location;
+    if (event.city) location += (location ? ', ' : '') + event.city;
+    if (event.country) location += (location ? ', ' : '') + event.country;
+
+    // Escape special characters for iCal
+    const escapeIcal = (str) => {
+        if (!str) return '';
+        return str
+            .replace(/\\/g, '\\\\')
+            .replace(/;/g, '\\;')
+            .replace(/,/g, '\\,')
+            .replace(/\n/g, '\\n');
+    };
+
+    const uid = `event-${event.id}@telegram-autocalendar`;
+    const now = formatICalDate(new Date().toISOString());
+
+    const icalContent = [
+        'BEGIN:VCALENDAR',
+        'VERSION:2.0',
+        'PRODID:-//Telegram Auto-Calendar//EN',
+        'CALSCALE:GREGORIAN',
+        'METHOD:PUBLISH',
+        'BEGIN:VEVENT',
+        `UID:${uid}`,
+        `DTSTAMP:${now}`,
+        `DTSTART:${startDate}`,
+        `DTEND:${endDate}`,
+        `SUMMARY:${escapeIcal(event.event_title)}`,
+        location ? `LOCATION:${escapeIcal(location)}` : '',
+        event.event_description ? `DESCRIPTION:${escapeIcal(event.event_description)}` : '',
+        event.event_link ? `URL:${event.event_link}` : '',
+        'END:VEVENT',
+        'END:VCALENDAR'
+    ].filter(line => line).join('\r\n');
+
+    // Create and download file
+    const blob = new Blob([icalContent], { type: 'text/calendar;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `${event.event_title.replace(/[^a-z0-9]/gi, '_').substring(0, 50)}.ics`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
 }
