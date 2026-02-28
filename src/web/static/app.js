@@ -1180,13 +1180,12 @@ function showCalendarDropdown(event, targetBtn) {
 }
 
 function openAppleCalendar(event) {
-    if (!event || !event.event_start) return;
+    if (!event || !event.id) return;
 
-    const icalContent = generateICalContent(event);
-
-    // Create a data URI and open it - this triggers Calendar app on iOS/macOS
-    const dataUri = 'data:text/calendar;charset=utf-8,' + encodeURIComponent(icalContent);
-    window.open(dataUri, '_blank');
+    // Use webcal:// protocol which triggers Calendar app on iOS/macOS
+    const httpUrl = `${window.location.origin}/api/events/${event.id}/ical`;
+    const webcalUrl = httpUrl.replace(/^https?:/, 'webcal:');
+    window.location.href = webcalUrl;
 }
 
 function generateICalContent(event) {

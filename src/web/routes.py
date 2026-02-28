@@ -119,6 +119,80 @@ def register_routes(app: Flask):
 
         return jsonify(event)
 
+    @app.route("/api/events/<int:event_id>/ical")
+    def api_event_ical(event_id: int):
+        """Get event as iCal file for calendar apps."""
+        from flask import Response
+
+        event = db.get_event_by_id(event_id)
+        if not event:
+            return "Event not found", 404
+
+        # Build location string
+        location_parts = []
+        if event.get("event_location"):
+            location_parts.append(event["event_location"])
+        if event.get("city"):
+            location_parts.append(event["city"])
+        if event.get("country"):
+            location_parts.append(event["country"])
+        location = ", ".join(location_parts)
+
+        # Format dates for iCal (YYYYMMDDTHHMMSSZ)
+        def format_ical_date(dt):
+            if not dt:
+                return None
+            return dt.strftime("%Y%m%dT%H%M%SZ")
+
+        start_date = format_ical_date(event.get("event_start"))
+        if not start_date:
+            return "Event has no start date", 400
+
+        # Default to 2 hour duration if no end date
+        end_dt = event.get("event_end")
+        if not end_dt and event.get("event_start"):
+            from datetime import timedelta
+            end_dt = event["event_start"] + timedelta(hours=2)
+        end_date = format_ical_date(end_dt)
+
+        # Escape special characters
+        def escape_ical(s):
+            if not s:
+                return ""
+            return s.replace("\\", "\\\\").replace(";", "\\;").replace(",", "\\,").replace("\n", "\\n")
+
+        now = datetime.utcnow().strftime("%Y%m%dT%H%M%SZ")
+        uid = f"event-{event_id}@telegram-autocalendar"
+
+        lines = [
+            "BEGIN:VCALENDAR",
+            "VERSION:2.0",
+            "PRODID:-//Telegram Auto-Calendar//EN",
+            "CALSCALE:GREGORIAN",
+            "METHOD:PUBLISH",
+            "BEGIN:VEVENT",
+            f"UID:{uid}",
+            f"DTSTAMP:{now}",
+            f"DTSTART:{start_date}",
+            f"DTEND:{end_date}",
+            f"SUMMARY:{escape_ical(event.get('event_title', 'Event'))}",
+        ]
+
+        if location:
+            lines.append(f"LOCATION:{escape_ical(location)}")
+        if event.get("event_description"):
+            lines.append(f"DESCRIPTION:{escape_ical(event['event_description'])}")
+        if event.get("event_link"):
+            lines.append(f"URL:{event['event_link']}")
+
+        lines.extend(["END:VEVENT", "END:VCALENDAR"])
+
+        ical_content = "\r\n".join(lines)
+
+        response = Response(ical_content, mimetype="text/calendar")
+        response.headers["Content-Disposition"] = f"attachment; filename=event-{event_id}.ics"
+        return response
+
     @app.route("/api/categories")
     def api_categories():
         """Get all categories with event counts."""
