@@ -271,6 +271,7 @@ def get_events(
     city: Optional[str] = None,
     country: Optional[str] = None,
     event_type: Optional[str] = None,
+    search: Optional[str] = None,
     limit: int = 100,
     offset: int = 0,
 ) -> list[dict]:
@@ -325,6 +326,16 @@ def get_events(
     if event_type:
         query += " AND e.event_type = %s"
         params.append(event_type)
+
+    if search:
+        query += """ AND (
+            LOWER(e.event_title) LIKE LOWER(%s)
+            OR LOWER(e.event_description) LIKE LOWER(%s)
+            OR LOWER(e.event_location) LIKE LOWER(%s)
+            OR LOWER(e.organizer) LIKE LOWER(%s)
+        )"""
+        search_term = f"%{search}%"
+        params.extend([search_term, search_term, search_term, search_term])
 
     query += " ORDER BY e.event_start ASC LIMIT %s OFFSET %s"
     params.extend([limit, offset])
@@ -389,6 +400,7 @@ def get_events_count(
     city: Optional[str] = None,
     country: Optional[str] = None,
     event_type: Optional[str] = None,
+    search: Optional[str] = None,
 ) -> int:
     """Get total count of events with optional filters (same filters as get_events)."""
     query = """
@@ -438,6 +450,16 @@ def get_events_count(
     if event_type:
         query += " AND e.event_type = %s"
         params.append(event_type)
+
+    if search:
+        query += """ AND (
+            LOWER(e.event_title) LIKE LOWER(%s)
+            OR LOWER(e.event_description) LIKE LOWER(%s)
+            OR LOWER(e.event_location) LIKE LOWER(%s)
+            OR LOWER(e.organizer) LIKE LOWER(%s)
+        )"""
+        search_term = f"%{search}%"
+        params.extend([search_term, search_term, search_term, search_term])
 
     result = execute_query(query, tuple(params), fetch=True)
     return result[0]["total"] if result else 0

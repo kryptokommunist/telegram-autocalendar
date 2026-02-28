@@ -10,6 +10,11 @@
             <h3>Filters</h3>
 
             <div class="filter-group">
+                <label for="search-input">Search</label>
+                <input type="text" id="search-input" class="filter-input" placeholder="Search events..." oninput="debounceSearch()">
+            </div>
+
+            <div class="filter-group">
                 <label>Next 7 Days</label>
                 <div class="weekday-buttons" id="weekday-buttons">
                     <!-- Populated dynamically by JS -->

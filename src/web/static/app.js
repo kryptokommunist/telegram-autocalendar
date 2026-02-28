@@ -41,6 +41,7 @@ async function loadEvents(filters = {}) {
     if (filters.country) params.append('country', filters.country);
     if (filters.max_price) params.append('max_price', filters.max_price);
     if (filters.event_type) params.append('event_type', filters.event_type);
+    if (filters.search) params.append('search', filters.search);
 
     const response = await fetchAPI(`/api/events?${params.toString()}`);
     loading.style.display = 'none';
@@ -549,9 +550,19 @@ function applyFilters() {
         city: document.getElementById('city-filter')?.value || null,
         country: document.getElementById('country-filter')?.value || null,
         event_type: document.getElementById('event-type-filter')?.value || null,
+        search: document.getElementById('search-input')?.value || null,
     };
 
     loadEvents(filters);
+}
+
+// Debounce search input
+let searchTimeout = null;
+function debounceSearch() {
+    if (searchTimeout) clearTimeout(searchTimeout);
+    searchTimeout = setTimeout(() => {
+        applyFilters();
+    }, 300);
 }
 
 // ============ Weekday Selection ============
@@ -658,6 +669,7 @@ function clearFilters() {
     const countryFilter = document.getElementById('country-filter');
     const eventTypeFilter = document.getElementById('event-type-filter');
     const groupSearch = document.getElementById('group-search');
+    const searchInput = document.getElementById('search-input');
     const sortSelect = document.getElementById('sort-select');
 
     if (dateFrom) dateFrom.value = '';
@@ -668,6 +680,7 @@ function clearFilters() {
     if (countryFilter) countryFilter.value = '';
     if (eventTypeFilter) eventTypeFilter.value = '';
     if (groupSearch) groupSearch.value = '';
+    if (searchInput) searchInput.value = '';
     if (sortSelect) sortSelect.value = 'date_asc';
 
     // Clear weekday buttons

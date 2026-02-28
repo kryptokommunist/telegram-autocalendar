@@ -45,6 +45,7 @@ def register_routes(app: Flask):
         city = request.args.get("city")
         country = request.args.get("country")
         event_type = request.args.get("event_type")
+        search = request.args.get("search")
         limit = request.args.get("limit", 100, type=int)
         offset = request.args.get("offset", 0, type=int)
 
@@ -72,6 +73,7 @@ def register_routes(app: Flask):
             city=city,
             country=country,
             event_type=event_type,
+            search=search,
             limit=limit,
             offset=offset,
         )
@@ -87,6 +89,7 @@ def register_routes(app: Flask):
             city=city,
             country=country,
             event_type=event_type,
+            search=search,
         )
 
         # Serialize datetime objects
