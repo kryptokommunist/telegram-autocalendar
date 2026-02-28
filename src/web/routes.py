@@ -119,6 +119,7 @@ def register_routes(app: Flask):
 
         return jsonify(event)
 
+    @app.route("/api/events/<int:event_id>/event.ics")
     @app.route("/api/events/<int:event_id>/ical")
     def api_event_ical(event_id: int):
         """Get event as iCal file for calendar apps."""

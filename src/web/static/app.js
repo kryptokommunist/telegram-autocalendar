@@ -1182,9 +1182,8 @@ function showCalendarDropdown(event, targetBtn) {
 function openAppleCalendar(event) {
     if (!event || !event.id) return;
 
-    // Open the .ics URL directly - without Content-Disposition header,
-    // macOS/iOS should offer to add to Calendar instead of downloading
-    window.location.href = `${window.location.origin}/api/events/${event.id}/ical`;
+    // Use .ics extension in URL - browsers recognize this and open Calendar app
+    window.location.href = `${window.location.origin}/api/events/${event.id}/event.ics`;
 }
 
 function generateICalContent(event) {
