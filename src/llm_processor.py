@@ -28,7 +28,9 @@ def build_extraction_prompt(
 ) -> str:
     """Build the prompt for event extraction."""
     categories = get_existing_categories()
-    current_date = datetime.now().strftime("%Y-%m-%d")
+    # Use message date as reference for relative dates, fall back to now if unknown
+    reference_date = message_date if message_date else datetime.now()
+    reference_date_str = reference_date.strftime("%Y-%m-%d")
     message_date_str = message_date.strftime("%Y-%m-%d %H:%M") if message_date else "Unknown"
 
     return f"""You are an event extraction assistant. Analyze the following Telegram message
@@ -68,8 +70,8 @@ Return JSON only, no other text:
   "event_description": "1-2 sentence summary"
 }}
 
-IMPORTANT: Use the message date as context for relative dates (e.g., "this Saturday", "next week").
-Today's date: {current_date}
+CRITICAL: Interpret ALL relative dates (e.g., "this Friday", "next week", "tomorrow") relative to the MESSAGE DATE ({reference_date_str}), NOT today's date.
+For example, if the message was posted on 2026-01-15 and says "this Saturday", the event is on 2026-01-17.
 
 Message:
 {message_text}"""
