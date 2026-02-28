@@ -28,15 +28,24 @@ def build_extraction_prompt(
 ) -> str:
     """Build the prompt for event extraction."""
     categories = get_existing_categories()
-    current_date = datetime.now().strftime("%Y-%m-%d")
-    message_date_str = message_date.strftime("%Y-%m-%d %H:%M") if message_date else current_date
-    message_date_only = message_date.strftime("%Y-%m-%d") if message_date else current_date
+    now = datetime.now()
+    current_date = now.strftime("%Y-%m-%d")
+    current_weekday = now.strftime("%A")  # e.g., "Monday"
+
+    if message_date:
+        message_date_str = message_date.strftime("%A, %Y-%m-%d %H:%M")  # e.g., "Monday, 2026-01-15 14:30"
+        message_weekday = message_date.strftime("%A")
+        message_date_only = message_date.strftime("%Y-%m-%d")
+    else:
+        message_date_str = f"{current_weekday}, {current_date}"
+        message_weekday = current_weekday
+        message_date_only = current_date
 
     return f"""You are an event extraction assistant. Analyze the following Telegram message
 and determine if it announces an event (meetup, party, conference, workshop, etc.).
 
 IMPORTANT DATES:
-- Today's date (when scanning): {current_date}
+- Today (when scanning): {current_weekday}, {current_date}
 - Message was posted on: {message_date_str}
 
 SOURCE CONTEXT:
