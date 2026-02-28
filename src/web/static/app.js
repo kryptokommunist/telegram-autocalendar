@@ -1182,10 +1182,9 @@ function showCalendarDropdown(event, targetBtn) {
 function openAppleCalendar(event) {
     if (!event || !event.id) return;
 
-    // Use webcal:// protocol which triggers Calendar app on iOS/macOS
-    const httpUrl = `${window.location.origin}/api/events/${event.id}/ical`;
-    const webcalUrl = httpUrl.replace(/^https?:/, 'webcal:');
-    window.location.href = webcalUrl;
+    // Open the .ics URL directly - without Content-Disposition header,
+    // macOS/iOS should offer to add to Calendar instead of downloading
+    window.location.href = `${window.location.origin}/api/events/${event.id}/ical`;
 }
 
 function generateICalContent(event) {
