@@ -193,10 +193,12 @@ def register_routes(app: Flask):
         # Check if this is for download or direct open
         download = request.args.get("download", "false").lower() == "true"
 
-        response = Response(ical_content, mimetype="text/calendar")
+        response = Response(ical_content, mimetype="text/calendar; charset=utf-8")
         if download:
             response.headers["Content-Disposition"] = f"attachment; filename=event-{event_id}.ics"
-        # Without Content-Disposition, browser/OS may open Calendar app directly
+        else:
+            # Use inline to trigger "Add Event" UI instead of download
+            response.headers["Content-Disposition"] = f"inline; filename=event-{event_id}.ics"
         return response
 
     @app.route("/api/categories")

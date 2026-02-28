@@ -1140,7 +1140,7 @@ function showCalendarDropdown(event, targetBtn) {
                 <span class="share-icon">📅</span>
                 <span class="share-label">Google</span>
             </a>
-            <a href="${getAppleCalendarUrl(event)}" class="share-option" onclick="event.stopPropagation()">
+            <a href="${getAppleCalendarUrl(event)}" target="_blank" class="share-option" onclick="event.stopPropagation()">
                 <span class="share-icon">🍎</span>
                 <span class="share-label">Apple</span>
             </a>
@@ -1182,9 +1182,9 @@ function showCalendarDropdown(event, targetBtn) {
 function getAppleCalendarUrl(event) {
     if (!event || !event.id) return '#';
 
-    // Use webcal:// protocol with .ics extension
-    const httpUrl = `${window.location.origin}/api/events/${event.id}/event.ics`;
-    return httpUrl.replace(/^https?:/, 'webcal:');
+    // Use data URI - this opens "Add Event" UI directly on iOS/macOS
+    const icalContent = generateICalContent(event);
+    return 'data:text/calendar;charset=utf8,' + encodeURIComponent(icalContent);
 }
 
 function generateICalContent(event) {
